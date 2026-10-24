@@ -64,10 +64,12 @@ lazily from the frame hook once the table is complete.
 
 ## 3. Getting code into the process
 
-* **Loader**: `dinput8.dll` proxy (`src/loader.c`). It exports `DirectInput8Create`, forwards it to
-  the real system DLL, and on attach loads every `*.asi` in the game dir. Wine/Proton only uses it
-  if told to: `WINEDLLOVERRIDES="dinput8=n,b"` (or the same override in the prefix `user.reg`).
-  The game already imports dinput8, so no injector is needed.
+* **Loader**: any ASI loader works; the mod is a plain DLL renamed `.asi`. I started with a
+  ~70-line `dinput8.dll` proxy (export `DirectInput8Create`, forward it to the real system DLL,
+  `LoadLibrary` every `*.asi` on attach) and later dropped it from the repo in favour of
+  [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader). Wine/Proton only loads a
+  native `dinput8.dll` if told to: `WINEDLLOVERRIDES="dinput8=n,b"` (or the same override in the
+  prefix `user.reg`). The game already imports dinput8, so no injector is needed.
 * **Timing**: the mod's DLL loads *before* SteamStub has decrypted `.text`. `DllMain` only starts a
   thread; the thread polls until the bytes at several known addresses equal the expected values
   (`Matches(addr, expected, len)`), then installs everything. The same compare doubles as a

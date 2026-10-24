@@ -20,13 +20,12 @@ Linux specific.
 
 ## Install
 
-1. Copy `dinput8.dll` and `SagaTweaks.asi` next to `LEGOStarWarsSaga.exe`.
-2. Proton / Wine: make the proxy DLL load. Steam launch option:
+1. Install an ASI loader: [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader)
+   (use the 32-bit `dinput8.dll` build next to `LEGOStarWarsSaga.exe`).
+2. Copy `SagaTweaks.asi` into the game folder (or its `scripts\` / `plugins\` subfolder).
+3. Proton / Wine: make the proxy DLL load. Steam launch option:
    `WINEDLLOVERRIDES="dinput8=n,b" %command%`
-3. Start the game. `SagaTweaks.ini` and `SagaTweaks.log` appear next to the exe.
-
-`dinput8.dll` is a tiny proxy that forwards to the real DirectInput and loads every `*.asi`
-from the game folder (also `scripts\` and `plugins\`).
+4. Start the game. `SagaTweaks.ini` and `SagaTweaks.log` appear next to the exe.
 
 ## Configuration
 
@@ -57,7 +56,7 @@ Debug-only keys (`LogFPS`, `TraceRT`, `TracePasses`, `SkipPass`, `SkipScaledPass
 Needs `i686-w64-mingw32-gcc`.
 
 ```
-make        # build/dinput8.dll + build/SagaTweaks.asi
+make        # build/SagaTweaks.asi
 make dist   # build/SagaTweaks.zip
 ```
 
