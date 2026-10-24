@@ -71,3 +71,14 @@ Single-player only changes; no online component. Use at your own risk.
 `framerate`, `render`, `prompts`, `input`, `menus`, `config`, plus `util` (patch primitives) and
 `texdump` (debug). Game addresses and signatures live in `src/game.h`. Each feature module exposes
 `<Name>Ready()` (are the expected game bytes present?), `<Name>Install()` and `<Name>Frame()`.
+
+## Releasing
+
+The version lives in `VERSION` and is embedded in the build (the log starts with `SagaTweaks <version>`).
+To release: add a `## <version>` section to `CHANGELOG.md`, bump `VERSION`, push to `main`. The
+`release` workflow builds `SagaTweaks.zip` and publishes it with that changelog section as the notes
+(a manual run of the workflow is a dry run).
+
+## License
+
+[GNU GPL version 3 only](LICENSE).

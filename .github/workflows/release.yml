@@ -1,0 +1,69 @@
+name: release
+
+on:
+  # Bump VERSION on main to release. Other pushes do not run this workflow.
+  push:
+    branches: [main]
+    paths: [VERSION]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Publishes only on a push whose VERSION is untagged. A manual run is a dry
+      # run: it builds and previews the changelog, and publishes nothing.
+      - name: Read version
+        id: ver
+        run: |
+          v=$(tr -d '[:space:]' < VERSION)
+          [[ $v =~ ^[0-9]+(\.[0-9]+)+$ ]] || { echo "Invalid VERSION: '$v'"; exit 1; }
+          release=false
+          if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+            echo "v$v already exists; not releasing"
+          elif [ "$GITHUB_EVENT_NAME" = push ]; then
+            release=true
+          fi
+          { echo "release=$release"; echo "version=$v"; echo "tag=v$v"; } >> "$GITHUB_OUTPUT"
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-i686 zip
+
+      - name: Build and package
+        run: make dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SagaTweaks
+          path: build/SagaTweaks.zip
+
+      # Changelog = the matching "## <version>" section of CHANGELOG.md.
+      - name: Write changelog
+        id: notes
+        run: |
+          awk -v v="${{ steps.ver.outputs.version }}" '
+            /^## / { on = ($2 == v); next }
+            on' CHANGELOG.md | sed -e '/./,$!d' > notes.md
+          if [ ! -s notes.md ]; then
+            echo "CHANGELOG.md has no '## ${{ steps.ver.outputs.version }}' section"
+            [ "${{ steps.ver.outputs.release }}" = true ] && exit 1
+            echo "- (no changelog section yet)" > notes.md
+          fi
+          {
+            echo "### Changelog for ${{ steps.ver.outputs.tag }} (publish: ${{ steps.ver.outputs.release }})"
+            cat notes.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create GitHub release
+        if: steps.ver.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: gh release create "$TAG" build/SagaTweaks.zip --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
