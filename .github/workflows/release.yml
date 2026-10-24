@@ -13,6 +13,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      NEXUS_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,6 +59,11 @@ jobs:
             echo "- (no changelog section yet)" > notes.md
           fi
           {
+            echo "changelog<<EOF_NOTES"
+            cat notes.md
+            echo "EOF_NOTES"
+          } >> "$GITHUB_OUTPUT"
+          {
             echo "### Changelog for ${{ steps.ver.outputs.tag }} (publish: ${{ steps.ver.outputs.release }})"
             cat notes.md
           } >> "$GITHUB_STEP_SUMMARY"
@@ -67,3 +74,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.ver.outputs.tag }}
         run: gh release create "$TAG" build/SagaTweaks.zip --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
+
+      # Skipped until the NEXUSMODS_API_KEY secret exists.
+      - name: Upload to Nexus Mods
+        if: steps.ver.outputs.release == 'true' && env.NEXUS_KEY != ''
+        uses: Nexus-Mods/upload-action@v1.0.0-beta.11
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          mod_id: ${{ secrets.NEXUSMODS_MOD_ID }}
+          file_id: ${{ secrets.NEXUSMODS_FILE_ID }}
+          filename: SagaTweaks.zip
+          display_name: SagaTweaks
+          version: ${{ steps.ver.outputs.version }}
+          changelog: ${{ steps.notes.outputs.changelog }}
+          category: main
+          archive_existing_version: true
+          update_mod_version: true
