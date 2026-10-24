@@ -9,7 +9,7 @@
  *   - removes the 85 fps cap, runs at the desktop refresh rate (shown in Video Settings)
  *   - render scale 50-300% (native row in Video Settings), with the HUD / particle pass
  *     rendered into a matching scaled backbuffer so effects are depth tested correctly
- *   - FSAA is available together with enhanced graphics
+ *   - the FSAA row is gone from Effects Settings (render scale supersamples everything)
  * Frame-rate independence
  *   - clock counters, blink timers and vertical (jump) physics behave as at 60 fps
  * Input
@@ -117,28 +117,6 @@
 #define ADDR_POS_VY_4      0x0055D577u
 
 /*
- * FSAA lock. byte_8264C7 is "UseHires" (enhanced graphics). The video settings screen
- * greys the FSAA row out, ignores presses on it, and the config loader forces FSAA to 0
- * whenever it is set. Each of those three tests is redirected to a byte that is always
- * zero, so FSAA stays selectable with enhanced graphics on.
- */
-#define ADDR_USE_HIRES         0x008264C7u  /* byte_8264C7 */
-#define ADDR_FSAA_LOCK_UI      0x005121E6u  /* cmp byte_8264C7, 0 (operand) in the video settings draw */
-#define ADDR_FSAA_LOCK_INPUT   0x0050F0FFu  /* ... in the FSAA row input handler */
-#define ADDR_FSAA_LOCK_CONFIG  0x006DC059u  /* ... in the config loader that forces FSAA to 0 */
-
-/*
- * Keep shadows and bloom when FSAA is on. The game downgrades them in sub_6E2610
- * (shadow method to 0, bloom method to 1) whenever FSAA is active, and the menu
- * greys the Shadows row / refuses the toggle for the same reason. The downgrade is
- * skipped and the three menu tests of dword_2976C30 are pointed at a zero dword.
- */
-#define ADDR_FSAA_DOWNGRADE    0x006E26CBu  /* jz short: skips the downgrade when FSAA is off */
-#define ADDR_FSAA_MENU_1       0x00509362u  /* cmp dword_2976C30, 0 (operand) in sub_509360 */
-#define ADDR_FSAA_MENU_2       0x00512436u  /* ... in the effects settings draw (shadows text) */
-#define ADDR_FSAA_MENU_3       0x005124A3u  /* ... in the effects settings draw (shadows alpha) */
-
-/*
  * Render scale. The video mode list ends at the desktop resolution. Entries for
  * desktop size * scale (RenderScales in the ini, default 1.5 and 2) are appended before
  * the game first looks a mode up (sub_6E1B70, whose first five bytes are hooked), so
@@ -183,8 +161,6 @@ static const uint8_t k_limit_load_orig[6]  = { 0xD9, 0x05, 0x2C, 0xEC, 0x75, 0x0
 static const uint8_t k_clock_orig[6]       = { 0x8B, 0x4C, 0x24, 0x04, 0xD9, 0x01 };
 static const uint8_t k_phys_orig[9]        = { 0x83, 0xEC, 0x18, 0xD9, 0x05, 0xDC, 0xB8, 0x87, 0x00 };
 static const uint8_t k_posvy_orig[4]       = { 0x18, 0x50, 0x92, 0x00 };
-static const uint8_t k_hires_addr_orig[4]  = { 0xC7, 0x64, 0x82, 0x00 };
-static const uint8_t k_fsaa_cmp_orig[4]   = { 0x30, 0x6C, 0x97, 0x02 };
 static const uint8_t k_modelookup_orig[5]  = { 0x83, 0xEC, 0x18, 0x53, 0x55 };
 static const uint8_t k_rt_h_orig[5]       = { 0xA1, 0x04, 0x67, 0x97, 0x02 };
 static const uint8_t k_rt_w_orig[5]       = { 0xA1, 0x00, 0x67, 0x97, 0x02 };
@@ -213,10 +189,6 @@ static int g_max_fps;          /* 0 = unlimited (vsync decides) */
 static int g_refresh_override; /* 0 = desktop refresh rate */
 static int g_fix_counters = 1;  /* make per-frame counters tick at 60 Hz */
 static int g_fix_physics = 1;   /* step vertical physics at a fixed 60 Hz */
-static int g_unlock_fsaa;       /* obsolete: the FSAA row is hidden (render scale replaces it) */
-static uint8_t g_zero_byte;
-static int g_fsaa_effects;  /* keep shadows and bloom with FSAA */
-static uint32_t g_zero_dword;
 static double g_scales[MAX_RENDER_SCALES];
 static int g_scale_count;
 void *g_lookup_tramp;
@@ -2429,7 +2401,6 @@ static void __cdecl FrameHook(int game, int *out)
         }
     }
     UpdatePhysicsStep();
-    g_zero_byte = g_unlock_fsaa ? 0 : *(uint8_t *)ADDR_USE_HIRES;
     if (g_hot_switch && game)
         HotSwitchInput();
     if (g_log_fps)
@@ -2604,13 +2575,6 @@ static DWORD WINAPI PatchThread(LPVOID param)
             Matches(ADDR_LIMIT_LOAD2, k_limit_load_orig, sizeof k_limit_load_orig) &&
             Matches(ADDR_REFRESH_LOAD, k_refresh_orig, sizeof k_refresh_orig) &&
             Matches(ADDR_CLOCK_UPDATE, k_clock_orig, sizeof k_clock_orig) &&
-            Matches(ADDR_FSAA_LOCK_UI, k_hires_addr_orig, sizeof k_hires_addr_orig) &&
-            Matches(ADDR_FSAA_LOCK_INPUT, k_hires_addr_orig, sizeof k_hires_addr_orig) &&
-            Matches(ADDR_FSAA_LOCK_CONFIG, k_hires_addr_orig, sizeof k_hires_addr_orig) &&
-            Matches(ADDR_FSAA_DOWNGRADE, (const uint8_t[]){ 0x74, 0x39 }, 2) &&
-            Matches(ADDR_FSAA_MENU_1, k_fsaa_cmp_orig, sizeof k_fsaa_cmp_orig) &&
-            Matches(ADDR_FSAA_MENU_2, k_fsaa_cmp_orig, sizeof k_fsaa_cmp_orig) &&
-            Matches(ADDR_FSAA_MENU_3, k_fsaa_cmp_orig, sizeof k_fsaa_cmp_orig) &&
             Matches(ADDR_MODE_LOOKUP, k_modelookup_orig, sizeof k_modelookup_orig) &&
             Matches(ADDR_RT_H_1, k_rt_h_orig, sizeof k_rt_h_orig) &&
             Matches(ADDR_RT_W_1, k_rt_w_orig, sizeof k_rt_w_orig) &&
@@ -2679,13 +2643,6 @@ static DWORD WINAPI PatchThread(LPVOID param)
             Log("refresh rate patched");
         else
             Log("refresh rate patch FAILED");
-    }
-
-    {
-        uint32_t z = (uint32_t)(uintptr_t)&g_zero_byte;
-
-        Log(WritePatch(ADDR_FSAA_LOCK_UI, &z, 4) && WritePatch(ADDR_FSAA_LOCK_INPUT, &z, 4) &&
-            WritePatch(ADDR_FSAA_LOCK_CONFIG, &z, 4) ? "FSAA unlocked" : "FSAA unlock FAILED");
     }
 
     {
@@ -2805,15 +2762,6 @@ static DWORD WINAPI PatchThread(LPVOID param)
             memcpy(patch + 1, &rel, 4);
             Log(WritePatch(ADDR_MODE_LOOKUP, patch, sizeof patch) ? "render scale hook installed" : "render scale hook FAILED");
         }
-    }
-
-    if (g_fsaa_effects) {
-        uint32_t z = (uint32_t)(uintptr_t)&g_zero_dword;
-        uint8_t jmp_short = 0xEB;
-
-        Log(WritePatch(ADDR_FSAA_DOWNGRADE, &jmp_short, 1) && WritePatch(ADDR_FSAA_MENU_1, &z, 4) &&
-            WritePatch(ADDR_FSAA_MENU_2, &z, 4) && WritePatch(ADDR_FSAA_MENU_3, &z, 4) ?
-            "shadows and bloom kept with FSAA" : "FSAA effects patch FAILED");
     }
 
     {
