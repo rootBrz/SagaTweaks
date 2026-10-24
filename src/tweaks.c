@@ -1421,21 +1421,16 @@ typedef struct {
 
 static const char *const k_prompt_names[] = { "Auto", "Xbox", "PlayStation" };
 static const int k_fps_list[] = { 0, 30, 60, 90, 120, 144, 165, 240 };
-static const int k_hz_list[]  = { 0, 60, 75, 90, 120, 144, 165, 240 };
 
 static const TweakOpt k_tweaks[] = {
     { "Skip Logos (restart)",        "SkipLogos",        &g_skip_logos,    OPT_BOOL,  1, NULL, 0, NULL, NULL, NULL },
     { "Skip Title Screen",           "SkipTitle",        &g_skip_title,    OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
+    { "Skip Cutscenes (Start)",      "SkipCutscenes",    &g_skip_cutscenes, OPT_BOOL, 0, NULL, 0, NULL, NULL, NULL },
     { "Hot-Switch Input",            "HotSwitchInput",   &g_hot_switch,    OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
     { "Join With Start",             "JoinWithStart",    &g_join_start,    OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
     { "Player 1 Button Prompts",     "ButtonPromptsP1",  &g_prompt_style[0], OPT_NAMED, 0, NULL, 3, NULL, NULL, k_prompt_names },
     { "Player 2 Button Prompts",     "ButtonPromptsP2",  &g_prompt_style[1], OPT_NAMED, 0, NULL, 3, NULL, NULL, k_prompt_names },
     { "FPS Limit",                   "MaxFPS",           &g_max_fps,       OPT_LIST,  0, k_fps_list, 8, "Unlimited", " FPS", NULL },
-    { "Refresh Rate",                "RefreshRate",      &g_refresh_override, OPT_LIST, 0, k_hz_list, 8, "Auto", " Hz", NULL },
-    { "Render Scale",                "RenderScale",      NULL,             OPT_SCALE, 0, NULL, 0, NULL, NULL, NULL },
-    { "Fix Frame Counters",          "FixFrameCounters", &g_fix_counters,  OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
-    { "Fix Jump Physics",            "FixJumpPhysics",   &g_fix_physics,   OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
-    { "Skip Cutscenes (Start)",      "SkipCutscenes",    &g_skip_cutscenes, OPT_BOOL, 0, NULL, 0, NULL, NULL, NULL },
 };
 #define TWEAK_COUNT ((int)(sizeof k_tweaks / sizeof k_tweaks[0]))
 

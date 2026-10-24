@@ -16,7 +16,7 @@ Linux specific.
 | FSAA | Row removed from Effects Settings: render scale supersamples the whole frame and replaces it. |
 | Input | Player 1 hot-switches keyboard / gamepad. A second gamepad joins as player 2 with **Start**; lost pads drop out cleanly and never lock the pause menu. |
 | Prompts | Xbox or PlayStation button glyphs, chosen per player (e.g. Xbox for P1, DualShock for P2). |
-| Menus | A **Tweaks** page in the main and pause menu exposes every option below. |
+| Menus | A **Tweaks** page in the main and pause menu holds the everyday options; render scale is in Video Settings. |
 
 ## Install
 
@@ -29,8 +29,8 @@ Linux specific.
 
 ## Configuration
 
-Everything is on the in-game **Tweaks** page; the same options live in `SagaTweaks.ini`,
-section `[SagaTweaks]`:
+The common options are on the in-game **Tweaks** page (render scale is in Video Settings); all of
+them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 
 | Key | Default | Meaning |
 |---|---|---|
