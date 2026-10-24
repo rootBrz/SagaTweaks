@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
 """Compare two ab_sample.py dumps (e.g. 120 fps vs 60 fps) and print globals whose change
 rate roughly doubles: per-frame counters / accumulators. Usage: ab_compare.py hi.json lo.json"""
 import json, struct, sys

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Menus: Render Scale row in Video Settings, the Tweaks page, hidden FSAA row, and the
  * Tweaks entry in the main and pause menu.

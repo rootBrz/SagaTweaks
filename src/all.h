@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 #pragma once
 /* Every module header, for the .c files. */
 #include "common.h"

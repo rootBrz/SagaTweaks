@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Input: keyboard / gamepad hot-switching, Start-only joining, drop-out recovery, join prompt text.
  */

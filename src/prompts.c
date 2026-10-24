@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Button prompts: Xbox / PlayStation glyph atlas, font patching and per-player style selection.
  */

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Shared helpers: log, memory patching, call/jmp/pointer patches, trampolines, vtable hooks.
  */

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Startup skips: boot logos and the "Press any button" title screen.
  */

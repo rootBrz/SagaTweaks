@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
 """
 Static scan of the (unpacked) LEGO Star Wars TCS exe for code that assumes a fixed
 frame rate. Reports:

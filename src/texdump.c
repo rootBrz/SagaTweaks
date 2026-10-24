@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Debug aid: dumps the game's textures / render targets to TGA files (DumpTextures=1).
  */

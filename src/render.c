@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Render scale: scaled effect render targets, depth twin, virtual backbuffer for the HUD pass,
  * shader screen constant, optional oversized video modes, and the D3D9 vtable hooks (plus pass tracing).

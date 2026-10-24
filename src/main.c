@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * SagaTweaks.asi - quality-of-life patches for LEGO Star Wars: The Complete Saga
  * (Steam build, LEGOStarWarsSaga.exe, 5,472,256 bytes).
@@ -78,6 +79,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
         if (GetModuleFileNameA(inst, path, MAX_PATH) && (slash = strrchr(path, '\\'))) {
             strcpy(slash + 1, "SagaTweaks.log");
             g_log = fopen(path, "w");
+            Log("SagaTweaks " SAGA_VERSION);
             strcpy(slash + 1, "SagaTweaks.ini");
             strcpy(g_ini_path, path);
             ConfigLoad(g_ini_path);

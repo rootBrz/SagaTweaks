@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 import struct,subprocess,sys,time,json,array
 label=sys.argv[1]; out=sys.argv[2]; gap=2.0
 pid=int(subprocess.check_output("pgrep -f 'S:.steamapps.common.Lego Star Wars Saga.LEGOStarWarsSaga.exe' | head -1",shell=True))

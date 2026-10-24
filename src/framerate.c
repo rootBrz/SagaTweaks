@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Frame rate: FPS cap, refresh rate, and frame-rate independence of clocks and jump physics.
  */

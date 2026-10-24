@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Cutscene skip: Start finishes the running cutscene parts and hides the transition.
  */

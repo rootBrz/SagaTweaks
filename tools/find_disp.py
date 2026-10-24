@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
 """List instructions whose memory operand has a given displacement (reg+disp), grouped by function.
 Usage: find_disp.py exe disp_hex [mnemonic_prefix]"""
 import sys, pefile, bisect
