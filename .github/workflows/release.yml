@@ -83,7 +83,7 @@ jobs:
           api_key: ${{ secrets.NEXUSMODS_API_KEY }}
           mod_id: ${{ vars.NEXUSMODS_MOD_ID }}
           file_id: ${{ vars.NEXUSMODS_FILE_ID }}
-          filename: SagaTweaks.zip
+          filename: build/SagaTweaks.zip
           display_name: SagaTweaks
           version: ${{ steps.ver.outputs.version }}
           changelog: ${{ steps.notes.outputs.changelog }}

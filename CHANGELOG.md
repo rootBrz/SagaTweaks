@@ -2,6 +2,10 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.0.2
+
+- No functional changes. Fixes the release workflow's Nexus Mods upload (wrong zip path).
+
 ## 1.0.1
 
 - No functional changes. First release published to Nexus Mods; the license, release workflow and Nexus upload were added.
