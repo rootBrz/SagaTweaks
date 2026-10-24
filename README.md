@@ -77,8 +77,8 @@ Single-player only changes; no online component. Use at your own risk.
 The version lives in `VERSION` and is embedded in the build (the log starts with `SagaTweaks <version>`).
 To release: add a `## <version>` section to `CHANGELOG.md`, bump `VERSION`, push to `main`. The
 `release` workflow builds `SagaTweaks.zip` and publishes it with that changelog section as the notes
-(a manual run of the workflow is a dry run). If the `NEXUSMODS_API_KEY`, `NEXUSMODS_MOD_ID` and
-`NEXUSMODS_FILE_ID` secrets are set, the same zip is also uploaded to Nexus Mods.
+(a manual run of the workflow is a dry run). If the `NEXUSMODS_API_KEY` secret and the `NEXUSMODS_MOD_ID` / `NEXUSMODS_FILE_ID` variables are
+set, the same zip is also uploaded to Nexus Mods.
 
 ## License
 

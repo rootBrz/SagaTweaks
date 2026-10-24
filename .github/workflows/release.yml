@@ -81,8 +81,8 @@ jobs:
         uses: Nexus-Mods/upload-action@v1.0.0-beta.11
         with:
           api_key: ${{ secrets.NEXUSMODS_API_KEY }}
-          mod_id: ${{ secrets.NEXUSMODS_MOD_ID }}
-          file_id: ${{ secrets.NEXUSMODS_FILE_ID }}
+          mod_id: ${{ vars.NEXUSMODS_MOD_ID }}
+          file_id: ${{ vars.NEXUSMODS_FILE_ID }}
           filename: SagaTweaks.zip
           display_name: SagaTweaks
           version: ${{ steps.ver.outputs.version }}
