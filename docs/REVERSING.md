@@ -187,6 +187,17 @@ substituting a scaled *virtual backbuffer* (same size, shares the scaled depth) 
 it to the real one in `Present`. Found by comparing screenshots at 100 % / 200 % and bisecting the
 passes with `SkipPass`.
 
+Later bug, "characters vanish after changing the scale at run time": the game saves the bound
+surfaces with `GetDepthStencilSurface` / `GetRenderTarget` and restores them later. While the scaled
+depth twin was bound it saved *our twin*; when the scale changed the twin was released and replaced,
+but the game kept restoring the old, smaller one, so the depth test clipped the scene and every
+dynamic object disappeared (statics and shadows were fine, which made it look random). Found with
+per-3-second diagnostics (`engine=` depth surface != `main=`, and `engine` equal to the *retired*
+twin's address) plus a scripted soak test: a debug file (`<ini>.scale`) changes the scale at run
+time while a screenshot metric (brown robe pixels in the centre) flags missing characters. Fix:
+hook the two `Get*` calls and hand the game its own surfaces instead of ours (and forget the
+cached surfaces on `Reset`). After that 24 random scale changes, 3.0x and 4.0x all passed.
+
 ### Menus: Render Scale row, Tweaks page, hidden FSAA row
 The menu system: table at `0x800AA8`; menu stack depth `0x800944`; menu objects at
 `0x921440 + 224 * depth` with the current row (`+10`), row count (`+18`), left/right/select

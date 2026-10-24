@@ -9,7 +9,7 @@ static const uint8_t k_modelookup_orig[5]  = { 0x83, 0xEC, 0x18, 0x53, 0x55 };
 static const uint8_t k_rt_h_orig[5]       = { 0xA1, 0x04, 0x67, 0x97, 0x02 };
 
 static const uint8_t k_rt_w_orig[5]       = { 0xA1, 0x00, 0x67, 0x97, 0x02 };
-   /* step vertical physics at a fixed 60 Hz */
+
 double g_scales[MAX_RENDER_SCALES];
 
 int g_scale_count;
@@ -76,17 +76,23 @@ static SetScissorRectFn g_orig_set_scissor;
 
 static SetDepthStencilFn g_orig_set_depth;
 
+typedef HRESULT (STDMETHODCALLTYPE *GetRenderTargetFn)(IDirect3DDevice9 *, DWORD, IDirect3DSurface9 **);
+
+typedef HRESULT (STDMETHODCALLTYPE *GetDepthStencilFn)(IDirect3DDevice9 *, IDirect3DSurface9 **);
+
+static GetRenderTargetFn g_orig_get_rt;
+
+static GetDepthStencilFn g_orig_get_depth;
+
 typedef HRESULT (STDMETHODCALLTYPE *SetConstFFn)(IDirect3DDevice9 *, UINT, const float *, UINT);
 
 static SetConstFFn g_orig_set_vs_const, g_orig_set_ps_const;
 
-static IDirect3DSurface9 *g_depth_main;
-     /* the game's full-size depth buffer */
-static IDirect3DSurface9 *g_depth_twin;
-     /* same format, size of the scaled targets */
-static IDirect3DSurface9 *g_engine_depth;
-   /* what the game last asked for */
+static IDirect3DSurface9 *g_depth_main; /* the game's full-size depth buffer */
+static IDirect3DSurface9 *g_depth_twin; /* same format, size of the scaled targets */
+static IDirect3DSurface9 *g_engine_depth; /* what the game last asked for */
 static UINT g_twin_w, g_twin_h;
+static unsigned g_diag_scaled_binds, g_diag_twin_used, g_diag_twin_fail, g_diag_depth_sets;
 
 /* Depth buffer that matches the scaled targets (a smaller one would clip or disable depth). */
 static int EnsureDepthTwin(IDirect3DDevice9 *dev)
@@ -116,8 +122,7 @@ static void **g_hooked_vtable;
 
 static int g_rt0_scaled;
 
-int g_trace_rt;
-          /* debug: log device calls for a few frames */
+int g_trace_rt; /* debug: log device calls for a few frames */
 static int g_trace_budget;
 
 static void Trace(const char *fmt, ...)
@@ -251,16 +256,14 @@ static HRESULT STDMETHODCALLTYPE HookDrawIdxUP(IDirect3DDevice9 *d, D3DPRIMITIVE
 
 typedef HRESULT (STDMETHODCALLTYPE *PresentFn)(IDirect3DDevice9 *, const RECT *, const RECT *, HWND, const RGNDATA *);
 
-typedef HRESULT (STDMETHODCALLTYPE *ResetFn)(IDirect3DDevice9 *, D3DPRESENT_PARAMETERS *);
-      /* a cutscene skip is running: the screen is kept black */
+typedef HRESULT (STDMETHODCALLTYPE *ResetFn)(IDirect3DDevice9 *, D3DPRESENT_PARAMETERS *); /* a cutscene skip is running: the screen is kept black */
 static PresentFn g_orig_present;
 
 static ResetFn g_orig_reset;
 
 static IDirect3DSurface9 *g_virtual_bb;
 
-static void *g_real_bb;
-                 /* identity of the swap chain's backbuffer, not a reference */
+static void *g_real_bb; /* identity of the swap chain's backbuffer, not a reference */
 static UINT g_vbb_w, g_vbb_h;
 
 static int g_vbb_used;
@@ -343,6 +346,8 @@ static HRESULT STDMETHODCALLTYPE HookReset(IDirect3DDevice9 *dev, D3DPRESENT_PAR
         g_depth_twin = NULL;
     }
     g_real_bb = NULL;
+    g_depth_main = NULL;      /* the game recreates its surfaces; learn them again from the next calls */
+    g_engine_depth = NULL;
     g_vbb_used = 0;
     return g_orig_reset(dev, pp);
 }
@@ -390,8 +395,19 @@ static HRESULT STDMETHODCALLTYPE HookSetRenderTarget(IDirect3DDevice9 *dev, DWOR
                                (desc.Width != (UINT)*(int *)ADDR_BACKBUFFER_W ||
                                 desc.Height != (UINT)*(int *)ADDR_BACKBUFFER_H);
         }
-        if (g_engine_depth && g_engine_depth == g_depth_main)
-            g_orig_set_depth(dev, (g_rt0_scaled && EnsureDepthTwin(dev)) ? g_depth_twin : g_depth_main);
+        if (g_rt0_scaled)
+            g_diag_scaled_binds++;
+        if (g_engine_depth && g_engine_depth == g_depth_main) {
+            int twin = g_rt0_scaled && EnsureDepthTwin(dev);
+
+            if (g_rt0_scaled) {
+                if (twin)
+                    g_diag_twin_used++;
+                else
+                    g_diag_twin_fail++;
+            }
+            g_orig_set_depth(dev, twin ? g_depth_twin : g_depth_main);
+        }
         if (was_scaled != g_rt0_scaled)
             ResendScreenConst(dev);
     }
@@ -408,9 +424,40 @@ static HRESULT STDMETHODCALLTYPE HookSetDepthStencil(IDirect3DDevice9 *dev, IDir
         desc.Width == (UINT)*(int *)ADDR_BACKBUFFER_W && desc.Height == (UINT)*(int *)ADDR_BACKBUFFER_H)
         g_depth_main = surface;                    /* the game's own full-size depth buffer */
     g_engine_depth = surface;
+    g_diag_depth_sets++;
     if (surface && surface == g_depth_main && g_rt0_scaled && EnsureDepthTwin(dev))
         surface = g_depth_twin;
     return g_orig_set_depth(dev, surface);
+}
+
+/*
+ * The game saves the bound surfaces with Get* and restores them later with Set*. It must never be
+ * handed the surfaces we substituted (scaled depth twin, virtual backbuffer): they are replaced
+ * when the scale changes, and the game would keep restoring a stale, smaller one - the depth test
+ * then clips the scene and every character disappears.
+ */
+static HRESULT STDMETHODCALLTYPE HookGetDepthStencil(IDirect3DDevice9 *dev, IDirect3DSurface9 **out)
+{
+    HRESULT hr = g_orig_get_depth(dev, out);
+
+    if (SUCCEEDED(hr) && out && *out && *out == g_depth_twin && g_depth_main) {
+        IDirect3DSurface9_Release(*out);
+        *out = g_depth_main;
+        IDirect3DSurface9_AddRef(g_depth_main);
+    }
+    return hr;
+}
+
+static HRESULT STDMETHODCALLTYPE HookGetRenderTarget(IDirect3DDevice9 *dev, DWORD index, IDirect3DSurface9 **out)
+{
+    HRESULT hr = g_orig_get_rt(dev, index, out);
+
+    if (SUCCEEDED(hr) && index == 0 && out && *out && *out == g_virtual_bb && g_real_bb) {
+        IDirect3DSurface9_Release(*out);
+        *out = (IDirect3DSurface9 *)g_real_bb;
+        IDirect3DSurface9_AddRef(*out);
+    }
+    return hr;
 }
 
 static HRESULT STDMETHODCALLTYPE HookSetViewport(IDirect3DDevice9 *dev, const D3DVIEWPORT9 *vp)
@@ -563,6 +610,8 @@ static void InstallRenderScaleHooks(void)
     PatchVtableEntry(vtable, VT_SET_RENDER_TARGET, (void *)HookSetRenderTarget, (void **)&g_orig_set_rt);
     PatchVtableEntry(vtable, VT_SET_VIEWPORT, (void *)HookSetViewport, (void **)&g_orig_set_viewport);
     PatchVtableEntry(vtable, VT_SET_DEPTH_STENCIL, (void *)HookSetDepthStencil, (void **)&g_orig_set_depth);
+    PatchVtableEntry(vtable, VT_GET_RENDER_TARGET, (void *)HookGetRenderTarget, (void **)&g_orig_get_rt);
+    PatchVtableEntry(vtable, VT_GET_DEPTH_STENCIL, (void *)HookGetDepthStencil, (void **)&g_orig_get_depth);
     PatchVtableEntry(vtable, VT_SET_SCISSOR_RECT, (void *)HookSetScissorRect, (void **)&g_orig_set_scissor);
     PatchVtableEntry(vtable, VT_CREATE_TEXTURE, (void *)HookCreateTexture, (void **)&g_orig_create_texture);
     PatchVtableEntry(vtable, VT_SET_TEXTURE, (void *)HookSetTexture, (void **)&g_orig_set_texture);
@@ -694,8 +743,34 @@ void RenderInstall(void)
     }
 }
 
+/* Debug (TraceRT=1): a file "<ini>.scale" holding a number sets the render scale at run time (for scripted tests). */
+static void DebugScaleRequest(void)
+{
+    static int frames;
+    char path[MAX_PATH + 8];
+    FILE *f;
+    double v;
+
+    if (++frames % 30)
+        return;
+    snprintf(path, sizeof path, "%s.scale", g_ini_path);
+    f = fopen(path, "r");
+    if (!f)
+        return;
+    if (fscanf(f, "%lf", &v) == 1 && v >= 0.25 && v <= 4.0) {
+        g_render_scale = v;
+        ((BuildTargetsFn)ADDR_BUILD_TARGETS)((void *)ADDR_DEVICE_OBJECT);
+        Log("render scale changed by debug file");
+    }
+    fclose(f);
+    remove(path);
+}
+
 void RenderFrame(int cur, int titles)
 {
+    static DWORD last_diag;
+    static int diag_lines;
+
     if (g_trace_passes) {
         static int frames;
 
@@ -712,6 +787,18 @@ void RenderFrame(int cur, int titles)
                 fclose(f);
             }
         }
+    }
+    if (g_trace_rt)
+        DebugScaleRequest();
+    if (g_trace_rt && g_render_scale != 1.0 && GetTickCount() - last_diag > 3000 && diag_lines < 40) {
+        char buf[200];
+
+        last_diag = GetTickCount();
+        diag_lines++;
+        snprintf(buf, sizeof buf, "diag: main=%p twin=%p %ux%u engine=%p sets=%u scaledBinds=%u twinUsed=%u twinFail=%u scale=%.2f",
+                 (void *)g_depth_main, (void *)g_depth_twin, g_twin_w, g_twin_h, (void *)g_engine_depth,
+                 g_diag_depth_sets, g_diag_scaled_binds, g_diag_twin_used, g_diag_twin_fail, g_render_scale);
+        Log(buf);
     }
     SyncModeTable();
     InstallRenderScaleHooks();

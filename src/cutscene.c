@@ -97,8 +97,7 @@ static void LogCutsceneState(const char *tag)
     Log(buf);
 }
 
-static int g_skip_active;
-   /* a skip is running: FrameHook steps the game until the cutscene is over */
+static int g_skip_active; /* a skip is running: FrameHook steps the game until the cutscene is over */
 #define SKIP_IDLE_STEPS 4    /* steps without a cutscene before the skip is over */
 
 /*

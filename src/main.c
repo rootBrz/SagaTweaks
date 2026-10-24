@@ -45,8 +45,7 @@ static DWORD WINAPI PatchThread(LPVOID param)
 {
     int tries;
 
-    (void)param;
-    /* wait for SteamStub to decrypt .text: the expected bytes must be there */
+    (void)param; /* wait for SteamStub to decrypt .text: the expected bytes must be there */
     for (tries = 0; tries < PATCH_WAIT_TRIES; tries++) {
         if (StartupReady() && FramerateReady() && RenderReady() && MenusReady() && InputReady() &&
             PromptsReady() && Matches(ADDR_FRAME_CALL, k_frame_call_orig, sizeof k_frame_call_orig))

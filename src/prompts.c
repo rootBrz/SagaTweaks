@@ -7,18 +7,13 @@ IDirect3DTexture9 *g_buttons_tex;
 
 SetTextureFn g_orig_set_texture;
 
-static IDirect3DTexture9 *g_combined_tex;
-  /* 256x256: Xbox glyphs on top, PlayStation glyphs below */
+static IDirect3DTexture9 *g_combined_tex; /* 256x256: Xbox glyphs on top, PlayStation glyphs below */
 static int g_atlas_failed;
 
-static int g_atlas_ready;
-                  /* font patched, combined atlas in use */
-int g_prompt_glyphs = 1;
-            /* PromptGlyphs=0 turns the whole feature off */
-int g_prompt_style[2];
-              /* per player: 0 auto, 1 Xbox, 2 PlayStation */
-int g_label_device;
-                 /* device the button label being built is for */
+static int g_atlas_ready; /* font patched, combined atlas in use */
+int g_prompt_glyphs = 1; /* PromptGlyphs=0 turns the whole feature off */
+int g_prompt_style[2]; /* per player: 0 auto, 1 Xbox, 2 PlayStation */
+int g_label_device; /* device the button label being built is for */
 #define ATLAS_W 256
 
 #define ATLAS_H 128

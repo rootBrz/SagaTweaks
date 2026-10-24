@@ -94,7 +94,7 @@
 #define DEVICE_MODE_TABLE_OFS 0x61C
 #define DEVICE_DESKTOP_W_OFS  0x608
 #define DEVICE_DESKTOP_H_OFS  0x60C
-#define MAX_RENDER_SCALE    2.8   /* 3.0 (5760 px wide) makes every character vanish; 2.85 still works */
+#define MAX_RENDER_SCALE    4.0
 #define MAX_RENDER_SCALES   8
 #define MAX_RENDER_DIM      8192
 
@@ -144,10 +144,13 @@ typedef void (__cdecl *InputSelectFn)(int ctx);
  */
 #define VT_SET_RENDER_TARGET 37
 #define VT_SET_VIEWPORT      47
+#define VT_GET_RENDER_TARGET 38
 #define VT_SET_DEPTH_STENCIL 39
+#define VT_GET_DEPTH_STENCIL 40
 #define VT_SET_SCISSOR_RECT  75
 #define VT_SET_VS_CONST_F    94
 #define VT_SET_PS_CONST_F    109
+#define ADDR_BUILD_TARGETS    0x006E2D20u  /* sub_6E2D20(this): (re)creates the effect render targets */
 #define ADDR_DEVICE_OBJECT   0x029765C8u   /* this; *(this + 4) is the IDirect3DDevice9 */
 
 #define MAX_DUMP_TEX 4096

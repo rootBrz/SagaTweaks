@@ -3,14 +3,11 @@
  */
 #include "all.h"
 
-int g_hot_switch = 1;
-     /* P1 follows the last used device; extra gamepads join only with Start */
-int g_start_button = 7;
-          /* log frame rate once a second, first 120 s */
+int g_hot_switch = 1; /* P1 follows the last used device; extra gamepads join only with Start */
+int g_start_button = 7; /* log frame rate once a second, first 120 s */
 static int g_detect_logged;
 
-static int g_join_logged;
-   /* Start fast-forwards the running cutscene */
+static int g_join_logged; /* Start fast-forwards the running cutscene */
 static int g_join_start_text;
 
 #define ADDR_CONTROLLER_STATUS 0x0054AE40u  /* sub_54AE40(slot): below 2 means that slot has no controller */

@@ -23,7 +23,6 @@
 
 #define ADDR_MENU_ROW_TEXT    0x0050F740u  /* sub_50F740(menu, text, alpha): draws and counts one row */
 
-#define ADDR_BUILD_TARGETS    0x006E2D20u  /* sub_6E2D20(this): (re)creates the effect render targets */
 
 #define ADDR_MENU_SOUND       0x00800940u
 
@@ -44,7 +43,7 @@
 
 #define MENU_SELECT_OFS       0x64
 
-static const double k_scale_steps[] = { 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5 };   /* above ~2.9x (5700+ px wide) the character pass goes missing */
+static const double k_scale_steps[] = { 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0 };
 
 #define SCALE_STEPS ((int)(sizeof k_scale_steps / sizeof k_scale_steps[0]))
 

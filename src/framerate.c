@@ -17,14 +17,10 @@ static const uint8_t k_refresh_orig[9]     = { 0x8B, 0x40, 0x08, 0x89, 0x86, 0x6
 
 static double g_limit_d = UNLIMITED_FPS;
 
-static float  g_limit_f = (float)UNLIMITED_FPS;
-   /* button code reported by the input scan for Start */
-int g_max_fps;
-          /* 0 = unlimited (vsync decides) */
-int g_refresh_override;
- /* 0 = desktop refresh rate */
-int g_fix_counters = 1;
-  /* make per-frame counters tick at 60 Hz */
+static float  g_limit_f = (float)UNLIMITED_FPS; /* button code reported by the input scan for Start */
+int g_max_fps; /* 0 = unlimited (vsync decides) */
+int g_refresh_override; /* 0 = desktop refresh rate */
+int g_fix_counters = 1; /* make per-frame counters tick at 60 Hz */
 int g_fix_physics = 1;
 
 int g_log_fps;
