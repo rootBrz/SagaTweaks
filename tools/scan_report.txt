@@ -1,0 +1,350 @@
+== clocks updated by sub_548FE0 (counter = clock+12) and code reading the counter ==
+clock 0085ea64 (counter 0085ea70)
+clock 00924fdc (counter 00924fe8)
+clock 00924ff8 (counter 00925004)
+clock 00925008 (counter 00925014)
+clock 00925028 (counter 00925034)
+clock 00925044 (counter 00925050)
+clock 0092505c (counter 00925068)
+clock 0092506c (counter 00925078)
+clock 0092507c (counter 00925088)
+clock 0092508c (counter 00925098)
+clock 0092509c (counter 009250a8)
+  counter 00925068 used at 0040abe8: mov ecx, dword ptr [0x925068]
+  counter 00925068 used at 0040b2fe: cmp dword ptr [0x925068], ebx
+  counter 00925068 used at 0041730a: cmp dword ptr [0x925068], 2
+  counter 00925068 used at 00419205: mov ecx, dword ptr [0x925068]
+  counter 00925068 used at 0041e9cc: mov ecx, dword ptr [0x925068]
+  counter 00925068 used at 00427104: mov ecx, dword ptr [0x925068]
+  counter 00925068 used at 00432861: cmp dword ptr [0x925068], 0
+  counter 00925068 used at 004328f5: cmp dword ptr [0x925068], 0
+  counter 00925068 used at 00434d60: add eax, dword ptr [0x925068]
+  counter 00925068 used at 00459eef: mov ecx, dword ptr [0x925068]
+  counter 00925068 used at 0045f13e: mov ecx, dword ptr [0x925068]
+  counter 009250a8 used at 00469c93: mov eax, dword ptr [0x9250a8]
+  counter 00925068 used at 004b9707: mov ecx, dword ptr [0x925068]
+  counter 00925068 used at 0054b313: cmp dword ptr [0x925068], 0
+  counter 00925068 used at 005680a6: mov ecx, dword ptr [0x925068]
+  counter 00925068 used at 00571615: mov ecx, dword ptr [0x925068]
+  counter 00925068 used at 00571c9a: mov ecx, dword ptr [0x925068]
+  counter 00925068 used at 005aa8b3: mov ecx, dword ptr [0x925068]
+
+== counters: globals changed by constant, by number of sites (>=1) ==
+02854d14 sites=45 modulo-uses=0  first=005c202b add dword ptr [0x2854d14], 1
+0297cb78 sites=42 modulo-uses=1  first=00703749 inc dword ptr [0x297cb78]
+02854d1c sites=35 modulo-uses=0  first=00420130 add dword ptr [0x2854d1c], 1
+00973ec8 sites=8 modulo-uses=0  first=005de078 add dword ptr [0x973ec8], 1
+02920a94 sites=6 modulo-uses=0  first=006446af add dword ptr [0x2920a94], 1
+02920a98 sites=6 modulo-uses=0  first=0064b26c add dword ptr [0x2920a98], 1
+02947b70 sites=5 modulo-uses=0  first=00655566 add dword ptr [0x2947b70], 1
+02962a2c sites=5 modulo-uses=0  first=0068bc09 sub dword ptr [0x2962a2c], 1
+008827e4 sites=4 modulo-uses=0  first=004d8d05 add dword ptr [0x8827e4], 1
+0297dc14 sites=4 modulo-uses=0  first=004f4d4e add dword ptr [0x297dc14], 4
+0091ef38 sites=4 modulo-uses=0  first=004f62bf add dword ptr [0x91ef38], 1
+00921248 sites=4 modulo-uses=0  first=004ff6d0 add dword ptr [0x921248], 1
+0095625c sites=4 modulo-uses=0  first=0059b976 add dword ptr [0x95625c], 1
+00973fec sites=4 modulo-uses=0  first=005e3432 add dword ptr [0x973fec], 4
+02913058 sites=4 modulo-uses=0  first=00622fd2 add dword ptr [0x2913058], 1
+02962108 sites=4 modulo-uses=0  first=006597e4 sub dword ptr [0x2962108], 1
+0087a6df sites=3 modulo-uses=0  first=0048415f add byte ptr [0x87a6df], 1
+00956424 sites=3 modulo-uses=0  first=0059e4c0 add dword ptr [0x956424], 1
+009739b8 sites=3 modulo-uses=0  first=005dedac add dword ptr [0x9739b8], 1
+00973ff0 sites=3 modulo-uses=1  first=005e2967 add dword ptr [0x973ff0], 1
+00971878 sites=3 modulo-uses=0  first=005e2cb5 add dword ptr [0x971878], 2
+02854f38 sites=3 modulo-uses=0  first=006029aa add dword ptr [0x2854f38], 1
+02913264 sites=3 modulo-uses=0  first=006105ed add dword ptr [0x2913264], 0x40000
+02913268 sites=3 modulo-uses=0  first=006105ff sub dword ptr [0x2913268], 0x40000
+0080f59c sites=3 modulo-uses=0  first=0062549a sub dword ptr [0x80f59c], 1
+02962974 sites=3 modulo-uses=0  first=0065d8bc add dword ptr [0x2962974], 1
+02962a24 sites=3 modulo-uses=0  first=00662837 add dword ptr [0x2962a24], 1
+029a9b10 sites=3 modulo-uses=0  first=006f1cb6 dec dword ptr [0x29a9b10]
+0297c198 sites=3 modulo-uses=0  first=006f295d inc dword ptr [0x297c198]
+0093b30c sites=2 modulo-uses=0  first=0042e3bd add dword ptr [0x93b30c], 2
+00879584 sites=2 modulo-uses=0  first=0047f40b sub dword ptr [0x879584], 1
+0087a6dc sites=2 modulo-uses=0  first=00483d68 add byte ptr [0x87a6dc], 1
+0087a778 sites=2 modulo-uses=0  first=00486e13 sub dword ptr [0x87a778], 1
+0087a954 sites=2 modulo-uses=0  first=004896ad add dword ptr [0x87a954], 1
+0087b2c8 sites=2 modulo-uses=0  first=00489947 add dword ptr [0x87b2c8], 1
+008824a7 sites=2 modulo-uses=0  first=004dc3d1 add byte ptr [0x8824a7], 1
+0088a284 sites=2 modulo-uses=0  first=004e6a55 add dword ptr [0x88a284], 1
+0088a532 sites=2 modulo-uses=0  first=004e778c add byte ptr [0x88a532], 1
+00951c78 sites=2 modulo-uses=0  first=0057f0de add dword ptr [0x951c78], 1
+00956258 sites=2 modulo-uses=0  first=0059b9e9 add dword ptr [0x956258], 1
+00973e4c sites=2 modulo-uses=0  first=005de201 add dword ptr [0x973e4c], 1
+029139c4 sites=2 modulo-uses=0  first=0063f740 sub dword ptr [0x29139c4], 1
+0291f66c sites=2 modulo-uses=0  first=00645e3a sub dword ptr [0x291f66c], 1
+029629e0 sites=2 modulo-uses=0  first=00689f29 sub dword ptr [0x29629e0], 1
+02973ae8 sites=2 modulo-uses=0  first=006bf650 add dword ptr [0x2973ae8], 1
+02974ca0 sites=2 modulo-uses=0  first=006c02dc add dword ptr [0x2974ca0], 1
+0081fe00 sites=2 modulo-uses=0  first=006c7fa6 sub dword ptr [0x81fe00], 1
+029755ec sites=2 modulo-uses=0  first=006d64e3 add dword ptr [0x29755ec], 0x10000
+029a9b2c sites=2 modulo-uses=0  first=006f1324 add dword ptr [0x29a9b2c], 0x20
+0082ab30 sites=2 modulo-uses=0  first=00713903 dec dword ptr [0x82ab30]
+00855d98 sites=1 modulo-uses=0  first=0040a234 add dword ptr [0x855d98], 1
+00880558 sites=1 modulo-uses=0  first=00436a55 add dword ptr [0x880558], 1
+00876840 sites=1 modulo-uses=0  first=0043a878 add dword ptr [0x876840], 1
+00876dd8 sites=1 modulo-uses=0  first=0045b14b add dword ptr [0x876dd8], 1
+00876dc0 sites=1 modulo-uses=0  first=0045c924 add dword ptr [0x876dc0], 1
+00879b78 sites=1 modulo-uses=0  first=0047cdec add dword ptr [0x879b78], 1
+0087a904 sites=1 modulo-uses=0  first=00489388 add dword ptr [0x87a904], 1
+0087b464 sites=1 modulo-uses=0  first=00491a6b add word ptr [0x87b464], 1
+0087b2d4 sites=1 modulo-uses=0  first=00493871 add dword ptr [0x87b2d4], 1
+0087befc sites=1 modulo-uses=0  first=004c43bc sub dword ptr [0x87befc], 1
+00881c28 sites=1 modulo-uses=0  first=004d4494 add byte ptr [0x881c28], 1
+008827ea sites=1 modulo-uses=0  first=004d83b5 add word ptr [0x8827ea], 1
+00882404 sites=1 modulo-uses=0  first=004d8a34 add word ptr [0x882404], 1
+00882a70 sites=1 modulo-uses=0  first=004d9f90 add dword ptr [0x882a70], 1
+00882900 sites=1 modulo-uses=1  first=004daf4a add dword ptr [0x882900], 1
+008824a4 sites=1 modulo-uses=0  first=004dce90 add word ptr [0x8824a4], 1
+00888ed2 sites=1 modulo-uses=0  first=004decbb add word ptr [0x888ed2], 1
+008894b0 sites=1 modulo-uses=0  first=004df95e add dword ptr [0x8894b0], 1
+008895d8 sites=1 modulo-uses=0  first=004e4078 add word ptr [0x8895d8], 1
+0088a274 sites=1 modulo-uses=0  first=004e739c add word ptr [0x88a274], 1
+0088a301 sites=1 modulo-uses=0  first=004e9ec8 add byte ptr [0x88a301], 1
+0297dbe4 sites=1 modulo-uses=0  first=004f3e20 add dword ptr [0x297dbe4], 1
+00917848 sites=1 modulo-uses=0  first=004f4000 add dword ptr [0x917848], 0x14
+0297e020 sites=1 modulo-uses=0  first=004f5ceb add dword ptr [0x297e020], 1
+0091eecc sites=1 modulo-uses=0  first=004f8b06 add dword ptr [0x91eecc], 1
+00915fac sites=1 modulo-uses=0  first=004f9862 sub dword ptr [0x915fac], 1
+00800464 sites=1 modulo-uses=0  first=004fb88b sub dword ptr [0x800464], 1
+0092124c sites=1 modulo-uses=0  first=004ffa6a add dword ptr [0x92124c], 1
+009213d4 sites=1 modulo-uses=0  first=00503a9e add dword ptr [0x9213d4], 1
+00921d04 sites=1 modulo-uses=0  first=0050f044 sub dword ptr [0x921d04], 1
+00921d88 sites=1 modulo-uses=0  first=005103ec sub dword ptr [0x921d88], 1
+00921d84 sites=1 modulo-uses=0  first=005103fc sub dword ptr [0x921d84], 1
+009242a0 sites=1 modulo-uses=0  first=00524cb0 add dword ptr [0x9242a0], 1
+02983a4c sites=1 modulo-uses=0  first=00545a80 add dword ptr [0x2983a4c], 0x1f5
+02983a54 sites=1 modulo-uses=0  first=00545a8a add dword ptr [0x2983a54], 0x85
+02983a58 sites=1 modulo-uses=0  first=00545a94 add dword ptr [0x2983a58], 0x179
+02983a40 sites=1 modulo-uses=0  first=0054638e add dword ptr [0x2983a40], 0x1f5
+00925038 sites=1 modulo-uses=0  first=005494a2 add byte ptr [0x925038], 1
+0093b26c sites=1 modulo-uses=0  first=0055bc10 add dword ptr [0x93b26c], 1
+0095123c sites=1 modulo-uses=0  first=00570692 add dword ptr [0x95123c], 1
+0095188e sites=1 modulo-uses=0  first=00577098 add word ptr [0x95188e], 0x8000
+00951bb4 sites=1 modulo-uses=0  first=00579c45 add dword ptr [0x951bb4], 1
+00951c08 sites=1 modulo-uses=0  first=0057b397 add dword ptr [0x951c08], 1
+00951bf4 sites=1 modulo-uses=0  first=0057b48b add dword ptr [0x951bf4], 1
+00951c80 sites=1 modulo-uses=0  first=0057f31d add dword ptr [0x951c80], 1
+0095441e sites=1 modulo-uses=0  first=00586150 add word ptr [0x95441e], 1
+009553e0 sites=1 modulo-uses=0  first=0058ae6e add dword ptr [0x9553e0], 1
+00955568 sites=1 modulo-uses=0  first=0058b42e add dword ptr [0x955568], 1
+00955880 sites=1 modulo-uses=0  first=00594599 add dword ptr [0x955880], 1
+00955878 sites=1 modulo-uses=0  first=005945a7 add dword ptr [0x955878], 1
+00956254 sites=1 modulo-uses=0  first=0059b9b8 add dword ptr [0x956254], 1
+00956250 sites=1 modulo-uses=0  first=0059b9bf add dword ptr [0x956250], 0xa
+0095628c sites=1 modulo-uses=0  first=0059b9e2 add dword ptr [0x95628c], 1
+00956284 sites=1 modulo-uses=0  first=0059bab7 add dword ptr [0x956284], 1
+009562a4 sites=1 modulo-uses=0  first=0059d19a add dword ptr [0x9562a4], 1
+00956428 sites=1 modulo-uses=1  first=0059e69f add dword ptr [0x956428], 0x20
+0095e410 sites=1 modulo-uses=1  first=005b15b2 sub dword ptr [0x95e410], 1
+0095e430 sites=1 modulo-uses=0  first=005b2422 add dword ptr [0x95e430], 1
+0096e4ec sites=1 modulo-uses=0  first=005d7abc sub dword ptr [0x96e4ec], 1
+00973e54 sites=1 modulo-uses=0  first=005de2ba add dword ptr [0x973e54], 1
+00973e1c sites=1 modulo-uses=0  first=005de675 sub dword ptr [0x973e1c], 1
+0080b6ec sites=1 modulo-uses=0  first=005ecf7e add dword ptr [0x80b6ec], 1
+00974014 sites=1 modulo-uses=0  first=005f23ae add dword ptr [0x974014], 0x40
+0080c0e8 sites=1 modulo-uses=0  first=005f4532 sub dword ptr [0x80c0e8], 1
+0080c0ec sites=1 modulo-uses=0  first=005f4b58 sub dword ptr [0x80c0ec], 1
+02924b44 sites=1 modulo-uses=0  first=00600299 add dword ptr [0x2924b44], 1
+0080e864 sites=1 modulo-uses=0  first=00603e6d add dword ptr [0x80e864], 0x7c
+02854b44 sites=1 modulo-uses=0  first=00609b6a add dword ptr [0x2854b44], 1
+0097390c sites=1 modulo-uses=0  first=0060b551 add dword ptr [0x97390c], 1
+0080f284 sites=1 modulo-uses=0  first=00613364 add dword ptr [0x80f284], 1
+02913050 sites=1 modulo-uses=0  first=00621d66 sub dword ptr [0x2913050], 1
+029130a0 sites=1 modulo-uses=0  first=00622b43 add dword ptr [0x29130a0], 1
+02913978 sites=1 modulo-uses=0  first=00635781 sub dword ptr [0x2913978], 1
+02920980 sites=1 modulo-uses=0  first=0064420d add dword ptr [0x2920980], 1
+0291f788 sites=1 modulo-uses=0  first=0064fd28 add dword ptr [0x291f788], 1
+02920a68 sites=1 modulo-uses=0  first=0064fd45 add dword ptr [0x2920a68], 5
+02962020 sites=1 modulo-uses=0  first=00650b2d sub dword ptr [0x2962020], 1
+02962024 sites=1 modulo-uses=0  first=00650bf9 sub dword ptr [0x2962024], 1
+0296201c sites=1 modulo-uses=0  first=00651ffe add dword ptr [0x296201c], 1
+0296202c sites=1 modulo-uses=0  first=00652478 add dword ptr [0x296202c], 1
+02962a34 sites=1 modulo-uses=0  first=0066213d add dword ptr [0x2962a34], 1
+02961fe0 sites=1 modulo-uses=0  first=0066caf1 add dword ptr [0x2961fe0], 1
+0292fc04 sites=1 modulo-uses=0  first=0066f7a9 add dword ptr [0x292fc04], 1
+0292fd0c sites=1 modulo-uses=0  first=0068680e add dword ptr [0x292fd0c], 1
+02920aac sites=1 modulo-uses=0  first=00686862 add dword ptr [0x2920aac], 1
+02962a20 sites=1 modulo-uses=0  first=00689f18 sub dword ptr [0x2962a20], 1
+02962ad8 sites=1 modulo-uses=0  first=0068cb65 add dword ptr [0x2962ad8], 5
+0296206c sites=1 modulo-uses=0  first=0069066a add dword ptr [0x296206c], 1
+02972c0c sites=1 modulo-uses=0  first=006981f7 add dword ptr [0x2972c0c], 1
+02972c10 sites=1 modulo-uses=0  first=006983b4 add dword ptr [0x2972c10], 1
+02972c14 sites=1 modulo-uses=0  first=006983ec add dword ptr [0x2972c14], 1
+02972c1c sites=1 modulo-uses=0  first=00698cfc add dword ptr [0x2972c1c], 1
+02972c20 sites=1 modulo-uses=0  first=00698da8 add dword ptr [0x2972c20], 1
+02973a08 sites=1 modulo-uses=0  first=006b64fb add dword ptr [0x2973a08], 1
+02973a40 sites=1 modulo-uses=0  first=006b9160 sub dword ptr [0x2973a40], 1
+02973afc sites=1 modulo-uses=0  first=006ce1d0 add dword ptr [0x2973afc], 1
+029755b0 sites=1 modulo-uses=0  first=006d5a64 sub dword ptr [0x29755b0], 1
+029755dc sites=1 modulo-uses=0  first=006d9f20 add dword ptr [0x29755dc], 1
+0297658c sites=1 modulo-uses=0  first=006da0eb add dword ptr [0x297658c], 1
+0297ad74 sites=1 modulo-uses=0  first=006de80a add dword ptr [0x297ad74], 1
+02974cd8 sites=1 modulo-uses=0  first=006e48e9 add dword ptr [0x2974cd8], 1
+02974ce0 sites=1 modulo-uses=0  first=006e4929 add dword ptr [0x2974ce0], 1
+02974cd4 sites=1 modulo-uses=0  first=006e4989 add dword ptr [0x2974cd4], 1
+02974cdc sites=1 modulo-uses=0  first=006e49b4 add dword ptr [0x2974cdc], 1
+029a9b20 sites=1 modulo-uses=0  first=006f1d1a add dword ptr [0x29a9b20], 0x10
+0082ab34 sites=1 modulo-uses=0  first=007138f9 add dword ptr [0x82ab34], 0x5265c00
+0297cc5c sites=1 modulo-uses=0  first=00713b0b inc dword ptr [0x297cc5c]
+0297cc70 sites=1 modulo-uses=0  first=0074193a add dword ptr [0x297cc70], 1
+02983a3c sites=1 modulo-uses=0  first=0074e4ff add dword ptr [0x2983a3c], 0x2db
+02983a28 sites=1 modulo-uses=0  first=0074e509 add dword ptr [0x2983a28], 0x377
+
+== modulo/mask uses of globals that are also counters ==
+00882900 read@004daf5c then idiv ecx@004daf62
+00956428 read@0059ea5f then and edi, 1@0059ea68
+0095e410 read@005b1490 then test byte ptr [ecx + 0x10], 2@005b14a4
+00973ff0 read@005e2926 then test byte ptr [esi], 1@005e2935
+0297cb78 read@0070696b then and ecx, 0xf@0070697f
+
+== fixed-rate float constants (1/60, 60, 30, 1/30) ==
+00751948 ['30.0 (float)']: 13 refs
+    00408fca fld
+    00419e58 fld
+    0041d2fc fld
+    0046cec7 fld
+    004e294b fld
+    004e4da2 fld
+    004ee555 fld
+    004f50cc fld
+    00503b4b fld
+    00503d6a fld
+    00503edb fld
+    0057bd8b fld
+    0058586e fld
+0075194c ['60.0 (float)']: 16 refs
+    00408fbb fld
+    0049a752 fld
+    004aec1f fld
+    004e5c76 fld
+    004f3dc3 fld
+    004f5091 fld
+    00529538 fld
+    00529582 fld
+    00534c5c fld
+    0054bbfe fld
+    0054bc31 fld
+    00596639 fld
+    00596732 fld
+    0064c02b fld
+    0064c0de fld
+    0064c0e6 fld
+007531c8 ['30.0 (double)']: 33 refs
+    00418e55 fmul
+    00425c86 fmul
+    00432d39 fcom
+    0047262d fmul
+    00494f02 fcomp
+    00495787 fcomp
+    004a9243 fmul
+    004a92fb fmul
+    004ab960 fld
+    004e00bd fmul
+    004e293e fcomp
+    004f3ef1 fcom
+    004f45c0 fdiv
+    00503c21 fadd
+    00503c55 fadd
+    00503cd4 fadd
+    00503d08 fadd
+    00503e3f fadd
+    00503e73 fadd
+    00503fa1 fadd
+    00503fd5 fadd
+    0050727b fmul
+    0054f6ce fmul
+    00554c00 fmul
+    0059be37 fdiv
+    005a6584 fdivr
+    0060f97e fdiv
+    0062e147 fdiv
+    0062e821 fdiv
+    006a440f fsub
+    006a4443 fsub
+    006a54a1 fsub
+    007435c4 fdiv
+00754fa4 ['1/60 (float)']: 5 refs
+    00428bbf fld
+    00428bfd fld
+    004ac0ca fld
+    004ac164 fld
+    0062a484 fld
+00758fc0 ['60.0 (double)']: 40 refs
+    004733cf fmul
+    004735a8 fmul
+    00492282 fmul
+    004af6d2 fadd
+    004b26d6 fmul
+    004d49c0 fmul
+    004d4a2f fmul
+    004f3d91 fmul
+    004f3ea3 fld
+    005180fa fmul
+    0054bc0d fdiv
+    0054bca5 fld
+    0054c121 fcomp
+    0054c323 fcomp
+    00554b7a fld
+    00564acf fmul
+    0056823b fmul
+    005682aa fmul
+    0057d694 fmul
+    0057d87c fmul
+    0057d9b0 fmul
+    005a3ad2 fmul
+    005a9c28 fld
+    005d85f1 fmul
+    005d866e fmul
+    005f3ed3 fmul
+    005f48aa fmul
+    00618153 fmul
+    006181c4 fdiv
+    0062c310 fmul
+    0062c355 fld
+    00655c36 fld
+    0066a216 fdiv
+    0066a22f fdiv
+    0066a248 fdiv
+    0066a261 fdiv
+    0066a27a fdiv
+    0068696f fdiv
+    0068e24f fdiv
+    0074e8a6 fld
+0075ad70 ['1/60 (double)']: 5 refs
+    0049262a fdiv
+    005d2173 fld
+    005d2213 fld
+    006200d8 fdiv
+    00620518 fdiv
+00763a20 ['1/30 (float)']: 1 refs
+    0059be16 fld
+0076b1b8 ['1/30 (double)']: 1 refs
+    0062e14f fmul
+007f5db0 ['30.0 (float)']: 1 refs
+    00428ae0 fld
+007f6834 ['30.0 (float)']: 1 refs
+    0044bcc8 fld
+007ffcec ['30.0 (float)']: 1 refs
+    004d942b fld
+0080005c ['30.0 (float)']: 1 refs
+    004e1c4b fmul
+008000bc ['30.0 (float)']: 1 refs
+    004e3d08 fld
+0080f54c ['1/60 (float)']: 4 refs
+    0061dbf6 fdiv
+    0061dc22 fdiv
+    0061dcad fdiv
+    0061dced fdiv
+008108e4 ['1/60 (float)']: 11 refs
+    00501cc8 fld
+    00656cf4 fld
+    00656e07 fld
+    006579f4 fstp
+    006853c2 fld
+    006853de fadd
+    00686347 fld
+    0068667f fld
+    00690633 fld
+    00690671 fld
+    0074e622 fld

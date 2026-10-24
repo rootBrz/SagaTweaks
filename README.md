@@ -1,0 +1,68 @@
+# SagaTweaks
+
+Quality-of-life ASI mod for **LEGO Star Wars: The Complete Saga** (Steam, `LEGOStarWarsSaga.exe`,
+5,472,256 bytes). Built for Proton on a handheld (Steam Deck / ROG Ally) but nothing in it is
+Linux specific.
+
+## Features
+
+| Area | What it does |
+|---|---|
+| Startup | Skips boot logos and the "Press any button" title screen (straight to the main menu). |
+| Cutscenes | **Start skips a cutscene** and every following part of the chapter intro, straight to gameplay. |
+| Frame rate | Removes the 85 fps cap, runs at the desktop refresh rate (shown in Video Settings). |
+| Frame-rate fixes | Clock counters, blink timers and jump physics behave as at 60 fps. |
+| Render scale | 50-300 % internal resolution, native row in Video Settings. Effects and the HUD pass are depth-tested at the scaled size. |
+| FSAA | Available together with enhanced graphics. |
+| Input | Player 1 hot-switches keyboard / gamepad. A second gamepad joins as player 2 with **Start**; lost pads drop out cleanly and never lock the pause menu. |
+| Prompts | Xbox or PlayStation button glyphs, chosen per player (e.g. Xbox for P1, DualShock for P2). |
+| Menus | A **Tweaks** page in the main and pause menu exposes every option below. |
+
+## Install
+
+1. Copy `dinput8.dll` and `SagaTweaks.asi` next to `LEGOStarWarsSaga.exe`.
+2. Proton / Wine: make the proxy DLL load. Steam launch option:
+   `WINEDLLOVERRIDES="dinput8=n,b" %command%`
+3. Start the game. `SagaTweaks.ini` and `SagaTweaks.log` appear next to the exe.
+
+`dinput8.dll` is a tiny proxy that forwards to the real DirectInput and loads every `*.asi`
+from the game folder (also `scripts\` and `plugins\`).
+
+## Configuration
+
+Everything is on the in-game **Tweaks** page; the same options live in `SagaTweaks.ini`,
+section `[SagaTweaks]`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `SkipLogos` | 1 | Skip boot logos (restart needed). |
+| `SkipTitle` | 1 | Skip the "Press any button" screen. |
+| `SkipCutscenes` | 1 | Start skips cutscenes. |
+| `HotSwitchInput` | 1 | P1 follows the last used device. |
+| `JoinWithStart` | 1 | Gamepads need Start to join as P2. |
+| `StartButton` | 7 | Raw button code used as Start. |
+| `ButtonPromptsP1` / `P2` | 0 | 0 auto, 1 Xbox, 2 PlayStation. `ButtonPrompts` sets both. |
+| `PromptGlyphs` | 1 | 0 leaves the original prompt art untouched. |
+| `MaxFPS` | 0 | FPS limit, 0 = unlimited (vsync still applies). |
+| `RefreshRate` | 0 | Force a refresh rate, 0 = desktop. |
+| `RenderScale` | 1.0 | Internal resolution multiplier. |
+| `FixFrameCounters` | 1 | Frame-rate independent clocks. |
+| `FixJumpPhysics` | 1 | 60 Hz vertical physics steps. |
+
+Debug-only keys (`LogFPS`, `TraceRT`, `TracePasses`, `SkipPass`, `SkipScaledPass`,
+`DumpTextures`) exist for reverse engineering; see `docs/REVERSING.md`.
+
+## Build
+
+Needs `i686-w64-mingw32-gcc`.
+
+```
+make        # build/dinput8.dll + build/SagaTweaks.asi
+make dist   # build/SagaTweaks.zip
+```
+
+## Compatibility
+
+Patches are bound to fixed addresses of the Steam executable and wait until SteamStub has
+decrypted the code. Other builds of the game will not match and are left untouched.
+Single-player only changes; no online component. Use at your own risk.
