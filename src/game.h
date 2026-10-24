@@ -94,6 +94,7 @@
 #define DEVICE_MODE_TABLE_OFS 0x61C
 #define DEVICE_DESKTOP_W_OFS  0x608
 #define DEVICE_DESKTOP_H_OFS  0x60C
+#define MAX_RENDER_SCALE    2.8   /* 3.0 (5760 px wide) makes every character vanish; 2.85 still works */
 #define MAX_RENDER_SCALES   8
 #define MAX_RENDER_DIM      8192
 

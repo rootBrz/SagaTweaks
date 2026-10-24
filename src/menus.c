@@ -44,7 +44,7 @@
 
 #define MENU_SELECT_OFS       0x64
 
-static const double k_scale_steps[] = { 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0 };
+static const double k_scale_steps[] = { 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5 };   /* above ~2.9x (5700+ px wide) the character pass goes missing */
 
 #define SCALE_STEPS ((int)(sizeof k_scale_steps / sizeof k_scale_steps[0]))
 

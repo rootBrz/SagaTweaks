@@ -26,8 +26,10 @@ void ConfigLoad(const char *ini)
 
     GetPrivateProfileStringA("SagaTweaks", "RenderScale", "1.0", buf, sizeof buf, ini);
     g_render_scale = atof(buf);
-    if (g_render_scale < 0.25 || g_render_scale > 4.0)
+    if (g_render_scale < 0.25)
         g_render_scale = 1.0;
+    else if (g_render_scale > MAX_RENDER_SCALE)
+        g_render_scale = MAX_RENDER_SCALE;
     {
         char list[128], *tok, *save;
 
