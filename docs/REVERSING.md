@@ -12,7 +12,7 @@ Everything ran as a tight edit / deploy / observe loop against the real game on 
 driven from my PC over SSH.
 
 ```
-edit src/tweaks.c -> make -> scp SagaTweaks.asi -> kill + relaunch game -> drive it -> read log / screenshot
+edit src/*.c -> make -> scp SagaTweaks.asi -> kill + relaunch game -> drive it -> read log / screenshot
 ```
 
 * **Build**: `i686-w64-mingw32-gcc`, one C file, no runtime dependencies. 32-bit because the game is.

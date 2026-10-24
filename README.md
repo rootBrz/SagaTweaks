@@ -64,3 +64,10 @@ make dist   # build/SagaTweaks.zip
 Patches are bound to fixed addresses of the Steam executable and wait until SteamStub has
 decrypted the code. Other builds of the game will not match and are left untouched.
 Single-player only changes; no online component. Use at your own risk.
+
+## Source layout
+
+`src/main.c` (entry, per-frame dispatch) and one module per feature: `startup`, `cutscene`,
+`framerate`, `render`, `prompts`, `input`, `menus`, `config`, plus `util` (patch primitives) and
+`texdump` (debug). Game addresses and signatures live in `src/game.h`. Each feature module exposes
+`<Name>Ready()` (are the expected game bytes present?), `<Name>Install()` and `<Name>Frame()`.
