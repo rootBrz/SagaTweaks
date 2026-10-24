@@ -182,8 +182,7 @@ static FILE *g_log;
 static int g_title_frames;
 static int g_skip_logos = 1;
 static int g_skip_title = 1;
-static int g_hot_switch = 1;
-static int g_join_start = 1;     /* gamepads join only with the Start button */
+static int g_hot_switch = 1;     /* P1 follows the last used device; extra gamepads join only with Start */
 static int g_start_button = 7;   /* button code reported by the input scan for Start */
 static int g_max_fps;          /* 0 = unlimited (vsync decides) */
 static int g_refresh_override; /* 0 = desktop refresh rate */
@@ -1426,8 +1425,7 @@ static const TweakOpt k_tweaks[] = {
     { "Skip Logos (restart)",        "SkipLogos",        &g_skip_logos,    OPT_BOOL,  1, NULL, 0, NULL, NULL, NULL },
     { "Skip Title Screen",           "SkipTitle",        &g_skip_title,    OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
     { "Skip Cutscenes (Start)",      "SkipCutscenes",    &g_skip_cutscenes, OPT_BOOL, 0, NULL, 0, NULL, NULL, NULL },
-    { "Hot-Switch Input",            "HotSwitchInput",   &g_hot_switch,    OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
-    { "Join With Start",             "JoinWithStart",    &g_join_start,    OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
+    { "Input Hot-Switch",            "HotSwitchInput",   &g_hot_switch,    OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
     { "Player 1 Button Prompts",     "ButtonPromptsP1",  &g_prompt_style[0], OPT_NAMED, 0, NULL, 3, NULL, NULL, k_prompt_names },
     { "Player 2 Button Prompts",     "ButtonPromptsP2",  &g_prompt_style[1], OPT_NAMED, 0, NULL, 3, NULL, NULL, k_prompt_names },
     { "FPS Limit",                   "MaxFPS",           &g_max_fps,       OPT_LIST,  0, k_fps_list, 8, "Unlimited", " FPS", NULL },
@@ -1837,7 +1835,7 @@ static int __cdecl JoinDetect(int mask, int kinds, int *type, int *code, int ski
 {
     int local_type, local_code, dev, tries;
 
-    if (!g_join_start)
+    if (!g_hot_switch)
         return ((DetectDeviceFn)ADDR_DETECT_DEVICE)(mask, kinds, type, code, skip_taken);
     for (tries = 0; tries < DEVICE_COUNT; tries++) {
         dev = ((DetectDeviceFn)ADDR_DETECT_DEVICE)(mask, kinds, &local_type, &local_code, skip_taken);
@@ -2535,7 +2533,7 @@ static DWORD WINAPI JoinTextThread(LPVOID param)
                 fflush(g_log);
             }
         }
-        g_join_start_text = g_join_start;
+        g_join_start_text = g_hot_switch;
         if (g_join_found)
             ApplyJoinText();
     }
@@ -2822,7 +2820,6 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
             g_skip_logos = GetPrivateProfileIntA("SagaTweaks", "SkipLogos", 1, ini);
             g_skip_title = GetPrivateProfileIntA("SagaTweaks", "SkipTitle", 1, ini);
             g_hot_switch = GetPrivateProfileIntA("SagaTweaks", "HotSwitchInput", 1, ini);
-            g_join_start = GetPrivateProfileIntA("SagaTweaks", "JoinWithStart", 1, ini);
             g_start_button = GetPrivateProfileIntA("SagaTweaks", "StartButton", 7, ini);
             g_max_fps = GetPrivateProfileIntA("SagaTweaks", "MaxFPS", 0, ini);
             g_log_fps = GetPrivateProfileIntA("SagaTweaks", "LogFPS", 0, ini);

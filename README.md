@@ -37,8 +37,7 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `SkipLogos` | 1 | Skip boot logos (restart needed). |
 | `SkipTitle` | 1 | Skip the "Press any button" screen. |
 | `SkipCutscenes` | 1 | Start skips cutscenes. |
-| `HotSwitchInput` | 1 | P1 follows the last used device. |
-| `JoinWithStart` | 1 | Gamepads need Start to join as P2. |
+| `HotSwitchInput` | 1 | P1 follows the last used device; extra gamepads join as P2 only with Start (like F2 on keyboard). |
 | `StartButton` | 7 | Raw button code used as Start. |
 | `ButtonPromptsP1` / `P2` | 0 | 0 auto, 1 Xbox, 2 PlayStation. `ButtonPrompts` sets both. |
 | `PromptGlyphs` | 1 | 0 leaves the original prompt art untouched. |
