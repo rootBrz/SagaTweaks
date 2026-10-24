@@ -28,8 +28,9 @@
 #define ADDR_MENU_SOUND       0x00800940u
 
 #define ADDR_MENU_SOUND_ID    0x00800950u
+#define ADDR_MENU_CANCEL_SOUND_ID 0x00800958u
 
-#define MENU_BUSY_OFS         0x68  /* dword: update is handled elsewhere while set */
+#define MENU_BACK_OFS         0x68  /* dword: Back / cancel pressed (the stock pages pop the menu on it) */
 
 #define MENU_CUR_ROW_OFS      10    /* word */
 
@@ -102,7 +103,7 @@ static int __cdecl VideoMenuUpdate(int menu)
     short *row = (short *)(menu + MENU_CUR_ROW_OFS);
     int result;
 
-    if (*(int *)(menu + MENU_BUSY_OFS))
+    if (*(int *)(menu + MENU_BACK_OFS))
         return ((MenuUpdateFn)VID_MENU_UPDATE_ORIG)(menu);
 
     if (*row == SCALE_ROW) {
@@ -277,8 +278,11 @@ static int __cdecl TweaksUpdate(int menu)
     int select = *(int *)(menu + MENU_SELECT_OFS);
     int step;
 
-    if (*(int *)(menu + MENU_BUSY_OFS))
+    if (*(int *)(menu + MENU_BACK_OFS)) {   /* B / Escape: leave the page like the stock options pages */
+        *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_CANCEL_SOUND_ID;
+        ((void (__cdecl *)(void))ADDR_MENU_POP)();
         return 0;
+    }
     if (row == TWEAK_COUNT) {
         if (select) {
             *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
@@ -323,7 +327,7 @@ static int __cdecl EffectsMenuUpdate(int menu)
     short before = *row;
     int r;
 
-    if (*(int *)(menu + MENU_BUSY_OFS))
+    if (*(int *)(menu + MENU_BACK_OFS))
         return ((MenuUpdateFn)FX_UPDATE_ORIG)(menu);
     *row = (short)(before + 1);
     *row_copy = before + 1;
@@ -353,7 +357,7 @@ static int OpenTweaksRow(int menu)
     int row = *(short *)(menu + MENU_CUR_ROW_OFS);
     int last = *(short *)(menu + MENU_MAX_ROW_OFS);
 
-    if (row != last - 1 || row <= 0 || !*(int *)(menu + MENU_SELECT_FLAG_OFS) || *(int *)(menu + MENU_BUSY_OFS))
+    if (row != last - 1 || row <= 0 || !*(int *)(menu + MENU_SELECT_FLAG_OFS) || *(int *)(menu + MENU_BACK_OFS))
         return 0;
     *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
     ((OpenMenuFn)ADDR_OPEN_MENU)(MENU_TWEAKS, 0, -1);
