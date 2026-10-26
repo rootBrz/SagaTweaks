@@ -595,7 +595,8 @@ static void SnapshotCopy(IDirect3DDevice9 *dev, IDirect3DSurface9 *dst)
 
 IDirect3DBaseTexture9 *SnapshotTexture(IDirect3DBaseTexture9 *tex)
 {
-    return g_snap_orig && tex == g_snap_orig && g_snap_tex ? (IDirect3DBaseTexture9 *)g_snap_tex : tex;
+    /* at 100% the game's own snapshot is right; g_snap_orig is left over from the last pause at another scale */
+    return g_render_scale != 1.0 && g_snap_orig && tex == g_snap_orig && g_snap_tex ? (IDirect3DBaseTexture9 *)g_snap_tex : tex;
 }
 
 static HRESULT STDMETHODCALLTYPE HookStretchRect(IDirect3DDevice9 *dev, IDirect3DSurface9 *src, const RECT *src_rect, IDirect3DSurface9 *dst, const RECT *dst_rect, D3DTEXTUREFILTERTYPE filter)

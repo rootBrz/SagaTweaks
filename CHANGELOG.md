@@ -2,6 +2,10 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.1.5
+
+- Fixed: after pausing at a render scale other than 100 %, setting the scale back to 100 % and pausing again showed the frame from the earlier pause behind the menu.
+
 ## 1.1.4
 
 - Fixed: the lightsaber sparks were 14 times rarer at 850 fps than at 60 fps (and 2 times at 120 fps). The random roll that starts a spark burst used the frame time, and the burst itself also lasts one frame. The roll now uses 1/60 s at most, like at 60 fps. `FixGameplayRates=0` turns it off.
