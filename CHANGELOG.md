@@ -2,6 +2,10 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.1.1
+
+- No functional changes. The release archive is a .7z instead of a .zip, because Nexus Mods quarantined the zip of 1.1.0.
+
 ## 1.1.0
 
 - New: **VSync** and **Window Mode** (fullscreen / windowed / borderless windowed) rows in Video Settings. `VSync` and `WindowMode` in the ini. Changes apply at once.

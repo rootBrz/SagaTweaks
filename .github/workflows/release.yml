@@ -36,7 +36,7 @@ jobs:
           { echo "release=$release"; echo "version=$v"; echo "tag=v$v"; } >> "$GITHUB_OUTPUT"
 
       - name: Install toolchain
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-i686 zip
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-i686 p7zip-full
 
       - name: Build and package
         run: make dist
@@ -44,7 +44,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: SagaTweaks
-          path: build/SagaTweaks.zip
+          path: build/SagaTweaks.7z
 
       # Changelog = the matching "## <version>" section of CHANGELOG.md.
       - name: Write changelog
@@ -73,7 +73,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.ver.outputs.tag }}
-        run: gh release create "$TAG" build/SagaTweaks.zip --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
+        run: gh release create "$TAG" build/SagaTweaks.7z --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
 
       # Skipped until the NEXUSMODS_API_KEY secret exists.
       - name: Upload to Nexus Mods
@@ -83,7 +83,7 @@ jobs:
           api_key: ${{ secrets.NEXUSMODS_API_KEY }}
           mod_id: ${{ vars.NEXUSMODS_MOD_ID }}
           file_id: ${{ vars.NEXUSMODS_FILE_ID }}
-          filename: build/SagaTweaks.zip
+          filename: build/SagaTweaks.7z
           display_name: SagaTweaks
           version: ${{ steps.ver.outputs.version }}
           changelog: ${{ steps.notes.outputs.changelog }}

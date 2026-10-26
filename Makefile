@@ -20,8 +20,8 @@ build/obj:
 	mkdir -p $@
 
 dist: all
-	rm -f build/SagaTweaks.zip
-	zip -qj build/SagaTweaks.zip build/SagaTweaks.asi LICENSE README.md CHANGELOG.md
+	rm -f build/SagaTweaks.7z
+	cd build && 7z a -bso0 SagaTweaks.7z SagaTweaks.asi ../LICENSE ../README.md ../CHANGELOG.md
 
 clean:
 	rm -rf build
