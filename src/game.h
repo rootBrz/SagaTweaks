@@ -184,6 +184,8 @@
 #define DEVICE_MODE_INDEX_OFS 0x660        /* mode table index in use */
 #define DEVICE_WINDOWED_OFS   0x65C        /* byte: windowed requested */
 
+#define ADDR_STREAK_FN     0x005A3730u  /* sub_5A3730: adds a segment to a trail (lightsaber streak) */
+#define ADDR_STREAK_CALLS  { 0x0049FC89u, 0x0049FD53u, 0x004B1E8Cu }
 #define ADDR_REFRESH_FN    0x006DF270u  /* sub_6DF270: refresh rate in Hz */
 #define ADDR_LIMITER_CALLS { 0x004FD20Bu, 0x004FD237u, 0x004FD25Eu, 0x004FD28Au }  /* its calls in the frame limiter sub_4FD050 */
 #define ADDR_REFRESH_LOAD  0x006E3AE8u  /* mov eax,[eax+8]; mov [esi+168h],eax */

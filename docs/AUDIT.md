@@ -239,3 +239,14 @@ Found by reading `sub_68EE40` in full and re-reading the old `ProbeHero` traces 
   limiter takes `max(refresh, limit)` and sleeps whole milliseconds, so 90 gave 97 fps; now exact for every value of the
   Tweaks list) and the audio left over after a cutscene skip (the skip now calls the game's stream stop `sub_693FD0` on
   the audio object `0x924DF8`, which the game otherwise only does on level changes).
+
+## 13. Lightsaber trail (streak) pool (fixed in 1.1.2)
+
+Symptom: at an unlocked frame rate the saber trail was gone after the first swing. `sub_5A3730` adds a segment to a trail
+(pool of 128 at `dword_95DA38`, trails at `dword_95DA3C` / `dword_95DA40`) and the saber code (`sub_49FA50`, `sub_4B1AB0`)
+calls it once per frame with a segment life of 0.25 s; `sub_5A3BD0(dt)` expires one tail segment per call. Counting the
+free list over the game's memory (`/proc/<pid>/mem`) while a swing was driven by poking the attack bit (`0x80`) into the
+controller: free segments fell to 0 within one swing and stayed at 0 with no active trail afterwards. With the fix they
+bottom out at 7-16 and return to 128. Fix: `StreakAdd` wraps the three calls and only marks the trail in use (`+16`,
+`+24`) on frames without a 60 Hz tick (`g_steps`). Not explained: how the segments become unreachable once the pool is
+empty (free list empty, no active trail); at true 60 Hz logic the pool also reached 0 once with six trails and recovered.

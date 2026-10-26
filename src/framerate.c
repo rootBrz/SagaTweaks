@@ -779,6 +779,39 @@ static int LimiterCallsOk(void)
     return 1;
 }
 
+/*
+ * Trails (the lightsaber streak). sub_5A3730 adds one segment per call, each living 0.25 s, from a pool of 128
+ * segments; the saber code calls it once per frame. At 60 fps that is 15 segments per trail, at 850 fps 212: the pool
+ * ran dry during the first swing and the trails never came back (the segments were left unreachable: free list
+ * empty, no active trail). A frame without a 60 Hz tick only marks the trail as still in use (field +16, and the
+ * colour field +24 which the full call sets as well) instead of adding a segment.
+ */
+static int g_steps;     /* 60 Hz ticks of this frame, defined below */
+static const uintptr_t k_streak_calls[] = ADDR_STREAK_CALLS;
+#define STREAK_CALLS ((int)(sizeof k_streak_calls / sizeof k_streak_calls[0]))
+
+typedef void (__cdecl *StreakFn)(int, float, int, int *, char, int);
+
+static void __cdecl StreakAdd(int pts, float life, int color, int *owner, char flag, int entity)
+{
+    if (g_fix_gameplay && g_steps < 1 && *owner) {
+        *(int *)(*owner + 16) = 1;
+        *(int *)(*owner + 24) = color;
+        return;
+    }
+    ((StreakFn)ADDR_STREAK_FN)(pts, life, color, owner, flag, entity);
+}
+
+static int StreakCallsOk(void)
+{
+    int i;
+
+    for (i = 0; i < STREAK_CALLS; i++)
+        if (!CallSiteOk(k_streak_calls[i], ADDR_STREAK_FN))
+            return 0;
+    return 1;
+}
+
 static float g_script_acc;
 __attribute__((used)) static int g_steps = 1;
 
@@ -898,7 +931,7 @@ int FramerateReady(void)
            Matches(ADDR_CLOSE_DIST_2, k_close_2_orig, sizeof k_close_2_orig) &&
            PushSitesMatch() && VelRebuildSiteOk() && ScriptTickSiteOk() &&
            CallSiteOk(ADDR_STEPUP_CALL, ADDR_STEPUP_FN) &&
-           LimiterCallsOk() && CallSiteOk(ADDR_CHAIN_CALL, ADDR_CHAIN_FN) && CallSiteOk(ADDR_STRAND_CALL, ADDR_STRAND_FN) &&
+           LimiterCallsOk() && StreakCallsOk() && CallSiteOk(ADDR_CHAIN_CALL, ADDR_CHAIN_FN) && CallSiteOk(ADDR_STRAND_CALL, ADDR_STRAND_FN) &&
            CallSiteOk(ADDR_SWAY_CALL, ADDR_SWAY_FN) && CallSiteOk(ADDR_WOBBLE_CALL, ADDR_WOBBLE_FN) &&
            DampSitesMatch() && Matches(ADDR_DAMP_BLEND, k_blend_orig, sizeof k_blend_orig) &&
            CallSiteOk(ADDR_HEADING_TRUNC, ADDR_TRUNC_FN) && TruncSitesMatch() && RateSitesMatch() && Matches(ADDR_ANGLE_APPROACH, k_approach_orig, sizeof k_approach_orig) &&
@@ -921,6 +954,13 @@ void FramerateInstall(void)
         for (i = 0; i < LIMITER_CALLS; i++)
             ok &= PatchCall(k_limiter_calls[i], LimiterRefresh);
         Log(ok ? "frame limiter honours limits below the refresh rate" : "frame limiter patch FAILED");
+    }
+    if (g_fix_gameplay) {
+        int i, ok = 1;
+
+        for (i = 0; i < STREAK_CALLS; i++)
+            ok &= PatchCall(k_streak_calls[i], StreakAdd);
+        Log(ok ? "trail segments added at 60 Hz" : "trail patch FAILED");
     }
     Log(PatchJmp(ADDR_REFRESH_LOAD, RefreshStub, 9) ? "refresh rate patched" : "refresh rate patch FAILED");
 

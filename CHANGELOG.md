@@ -2,6 +2,10 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.1.2
+
+- Fixed: the lightsaber trail disappeared for good after the first swing when the frame rate is unlocked. The saber added one trail segment per frame to a pool of 128, which ran dry within one swing at high frame rates. Segments are now added 60 times per second at any frame rate, like at 60 fps. `FixGameplayRates=0` turns it off.
+
 ## 1.1.1
 
 - No functional changes. The release archive is a .7z instead of a .zip, because Nexus Mods quarantined the zip of 1.1.0.
