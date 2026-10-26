@@ -13,6 +13,7 @@ Each release needs a `## <version>` section here matching `VERSION`. The release
 - Fixed (tested on the Deck: 10 of 10 jumps over the fallen tree at 850 fps, speed into the wall within 1 % of 60 fps early in the jump): the contact velocity blend (`FixContactVelocity`) is corrected for the walk easing, two more push-out loads (`sub_679310`, an editor handler) are scaled with the step.
 - Fixed: **FPS Limit** values below the display's refresh rate did nothing, and the others overshot (90 gave 97 fps). Every value of the Tweaks list now holds exactly.
 - Fixed: the audio of a skipped cutscene kept playing over the level.
+- Fixed: review pass. The frame-count debounces (player dropped or pad gone: 60 frames, window mode start: 30 frames) are now real time (1 s and 0.5 s); at 1000 fps they were 16x too short. The join-prompt rewriter only overwrites the known prompt text, never memory the game has reused. Invalid ini values (`ButtonPrompts*` out of range, negative `MaxFPS` or `RefreshRate`) are clamped, and the window mode code checks the mode table before using it.
 - New: **VSync** and **Window Mode** (fullscreen / windowed / borderless windowed) rows in Video Settings; `VSync` and `WindowMode` in the ini. Changes apply at once.
 
 ## 1.0.2

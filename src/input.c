@@ -13,7 +13,7 @@ static int g_join_start_text;
 
 #define ADDR_CONTROLLER_STATUS 0x0054AE40u  /* sub_54AE40(slot): below 2 means that slot has no controller */
 
-#define DROP_DEBOUNCE_FRAMES  60
+#define DROP_DEBOUNCE_MS      1000   /* time, not frames: 60 frames were 60 ms at 1000 fps */
 
 static unsigned DeviceMask(int device)
 {
@@ -36,7 +36,8 @@ static void AssignDevice(int slot, int device)
  * Player 1 follows the device that was used last (keyboard or gamepad). If player 1
  * is already on a gamepad, other gamepads are left to the game so they join as player 2.
  */
-static int g_p1_inactive_frames;
+static DWORD g_p1_inactive_since;   /* tick count when player 1 became inactive, 0 = active */
+static int g_p1_dropped;
 
 /*
  * If player 1 gets dropped (controller removed, remote play glitches, ...) the game keeps
@@ -49,20 +50,27 @@ static int HandleDroppedPlayer1(void)
     int p1 = *(int *)ADDR_PLAYER_OBJ;
 
     if (!p1 || *(char *)(p1 + PLAYER_ACTIVE_OFS) < 0) {
-        g_p1_inactive_frames = 0;
+        g_p1_inactive_since = 0;
+        g_p1_dropped = 0;
         return 0;
     }
-    if (g_p1_inactive_frames == 0 && g_log) {
-        int status0 = ((int (__cdecl *)(int))ADDR_CONTROLLER_STATUS)(0);
-        int status1 = ((int (__cdecl *)(int))ADDR_CONTROLLER_STATUS)(1);
+    if (!g_p1_inactive_since) {
+        g_p1_inactive_since = GetTickCount() | 1;
+        if (g_log) {
+            int status0 = ((int (__cdecl *)(int))ADDR_CONTROLLER_STATUS)(0);
+            int status1 = ((int (__cdecl *)(int))ADDR_CONTROLLER_STATUS)(1);
 
-        fprintf(g_log, "player 1 became inactive: slot 0 device %d (assigned %d), slot 1 device %d, controller status %d/%d\n",
-                *(int *)ADDR_SLOT_DEVICE, *(int *)ADDR_SLOT_ASSIGNED, *(int *)(ADDR_SLOT_DEVICE + 12), status0, status1);
-        fflush(g_log);
+            fprintf(g_log, "player 1 became inactive: slot 0 device %d (assigned %d), slot 1 device %d, controller status %d/%d\n",
+                    *(int *)ADDR_SLOT_DEVICE, *(int *)ADDR_SLOT_ASSIGNED, *(int *)(ADDR_SLOT_DEVICE + 12), status0, status1);
+            fflush(g_log);
+        }
     }
-    if (++g_p1_inactive_frames == DROP_DEBOUNCE_FRAMES && *(int *)ADDR_SLOT_ASSIGNED) {
-        ((AssignDeviceFn)ADDR_ASSIGN_DEVICE)(0, -1);
-        Log("player 1 dropped, device unassigned so they can rejoin");
+    if (!g_p1_dropped && GetTickCount() - g_p1_inactive_since >= DROP_DEBOUNCE_MS) {
+        g_p1_dropped = 1;
+        if (*(int *)ADDR_SLOT_ASSIGNED) {
+            ((AssignDeviceFn)ADDR_ASSIGN_DEVICE)(0, -1);
+            Log("player 1 dropped, device unassigned so they can rejoin");
+        }
     }
     return 1;
 }
@@ -117,7 +125,8 @@ static void TraceInputState(void)
  * the device assigned to slot 1, so nobody could join as player 2 again. Once the device has been
  * reported disconnected for a short while the slot is released.
  */
-static int g_p2_gone_frames;
+static DWORD g_p2_gone_since;   /* 0 = device present */
+static int g_p2_released;
 
 static void HandleDisconnectedPlayer2(void)
 {
@@ -125,10 +134,14 @@ static void HandleDisconnectedPlayer2(void)
 
     if (!*(int *)(ADDR_SLOT_ASSIGNED + 12) || device < 0 || device >= FIRST_KEYBOARD_DEVICE ||
         *(int *)ADDR_ALT_INPUT_MODE || DeviceConnected(device)) {
-        g_p2_gone_frames = 0;
+        g_p2_gone_since = 0;
+        g_p2_released = 0;
         return;
     }
-    if (++g_p2_gone_frames == DROP_DEBOUNCE_FRAMES) {
+    if (!g_p2_gone_since)
+        g_p2_gone_since = GetTickCount() | 1;
+    if (!g_p2_released && GetTickCount() - g_p2_gone_since >= DROP_DEBOUNCE_MS) {
+        g_p2_released = 1;
         ((AssignDeviceFn)ADDR_ASSIGN_DEVICE)(1, -1);
         if (g_log) {
             fprintf(g_log, "player 2 device %d disconnected, slot 1 released\n", device);
@@ -418,12 +431,14 @@ static void ApplyJoinText(void)
 
     for (i = 0; i < g_join_found; i++) {
         const char *want = g_join_start_text ? k_join_start[g_join_kind[i]] : k_join_orig[g_join_kind[i]];
-        size_t n = strlen(want) + 1;
-
+        const char *other = g_join_start_text ? k_join_orig[g_join_kind[i]] : k_join_start[g_join_kind[i]];
+        size_t n = strlen(want) + 1, n_other = strlen(other) + 1;
         char now[40];
         SIZE_T got;
 
-        if (ReadProcessMemory(GetCurrentProcess(), g_join_addr[i], now, n, &got) && got == n && memcmp(now, want, n))
+        /* Only the other variant of the text is replaced: a block the game has freed and reused is left alone. */
+        if (ReadProcessMemory(GetCurrentProcess(), g_join_addr[i], now, n_other, &got) && got == n_other &&
+            !memcmp(now, other, n_other))
             WriteProcessMemory(GetCurrentProcess(), g_join_addr[i], want, n, &got);
     }
 }

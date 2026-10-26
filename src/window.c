@@ -9,7 +9,7 @@ static const uint8_t k_interval_orig[6] = { 0x89, 0x9E, 0x6C, 0x01, 0x00, 0x00 }
 #define D3DPRESENT_INTERVAL_IMMEDIATE_ 0x80000000u
 #define WINDOWED_STYLE (0x00CF0000u | WS_VISIBLE)   /* the style the game gives its own windowed window */
 #define POPUP_STYLE    (WS_POPUP | WS_VISIBLE)
-#define STARTUP_FRAMES 30                           /* let the first device settle before the first reset */
+#define STARTUP_MS     500                          /* let the first device settle before the first reset (time, not frames: 30 frames are 30 ms at 1000 fps) */
 
 int g_vsync = 1;
 int g_window_mode;
@@ -54,14 +54,25 @@ void WindowApply(void)
     char *dev = (char *)ADDR_DEVICE_OBJECT;
     HWND wnd = *(HWND *)ADDR_GAME_WINDOW;
     int *rect = (int *)ADDR_WINDOW_RECT;   /* nWidth, nHeight, X, Y */
-    int desk_w = *(int *)(dev + DEVICE_DESKTOP_W_OFS), desk_h = *(int *)(dev + DEVICE_DESKTOP_H_OFS);
-    int *mode = (int *)(*(char **)(dev + DEVICE_MODE_TABLE_OFS) + 16 * *(int *)(dev + DEVICE_MODE_INDEX_OFS));
+    int desk_w, desk_h;
     int windowed = g_window_mode != WINDOW_FULLSCREEN;
 
     g_present_interval = g_vsync ? 1 : D3DPRESENT_INTERVAL_IMMEDIATE_;
     if (!*(void **)(dev + 4) || !wnd)
         return;
+    desk_w = *(int *)(dev + DEVICE_DESKTOP_W_OFS);
+    desk_h = *(int *)(dev + DEVICE_DESKTOP_H_OFS);
+    if (g_window_mode != WINDOW_FULLSCREEN && (desk_w <= 0 || desk_h <= 0))
+        return;
     if (g_window_mode == WINDOW_WINDOWED) {
+        int index = *(int *)(dev + DEVICE_MODE_INDEX_OFS), count = *(int *)(dev + DEVICE_MODE_COUNT_OFS);
+        int *mode = *(int **)(dev + DEVICE_MODE_TABLE_OFS);
+
+        if (!mode || index < 0 || index >= count)
+            return;
+        mode += 4 * index;                     /* 16-byte entries: width, height, ... */
+        if (mode[0] <= 0 || mode[1] <= 0)
+            return;
         int w = mode[0], h = mode[1];
         RECT r;
 
@@ -93,12 +104,16 @@ void WindowApply(void)
 /* Applies a non-default ini setting once the game's first device exists. */
 void WindowFrame(void)
 {
-    static int frames;
+    static DWORD since;
+    static int done;
 
-    if (frames > STARTUP_FRAMES)
+    if (done || !*(void **)(ADDR_DEVICE_OBJECT + 4))
         return;
-    if (!*(void **)(ADDR_DEVICE_OBJECT + 4))
+    if (!since)
+        since = GetTickCount() | 1;
+    if (GetTickCount() - since < STARTUP_MS)
         return;
-    if (++frames == STARTUP_FRAMES && (g_window_mode != WINDOW_FULLSCREEN || !g_vsync))
+    done = 1;
+    if (g_window_mode != WINDOW_FULLSCREEN || !g_vsync)
         WindowApply();
 }

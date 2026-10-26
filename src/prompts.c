@@ -342,11 +342,13 @@ static int PadIsSony(int pad)
 
 static void UpdatePromptStyle(void)
 {
-    static int frames;
+    static DWORD last;
     IDirect3DDevice9 *dev = *(IDirect3DDevice9 **)(ADDR_DEVICE_OBJECT + 4);
 
-    if (frames++ % 120 == 0) {
+    if (!last || GetTickCount() - last >= 2000) {     /* every 2 s, not every 120 frames (8 times a second at 1000 fps) */
         int i;
+
+        last = GetTickCount() | 1;
 
         for (i = 0; i < 16; i++)
             g_sony[i] = PadIsSony(i);

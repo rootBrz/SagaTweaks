@@ -30,6 +30,14 @@ void ConfigLoad(const char *ini)
     all = GetPrivateProfileIntA("SagaTweaks", "ButtonPrompts", 0, ini);
     g_prompt_style[0] = GetPrivateProfileIntA("SagaTweaks", "ButtonPromptsP1", all, ini);
     g_prompt_style[1] = GetPrivateProfileIntA("SagaTweaks", "ButtonPromptsP2", all, ini);
+    if (g_prompt_style[0] < 0 || g_prompt_style[0] > 2)     /* indexes the name table of the Tweaks page */
+        g_prompt_style[0] = 0;
+    if (g_prompt_style[1] < 0 || g_prompt_style[1] > 2)
+        g_prompt_style[1] = 0;
+    if (g_max_fps < 0)
+        g_max_fps = 0;
+    if (g_refresh_override < 0)
+        g_refresh_override = 0;
 
     GetPrivateProfileStringA("SagaTweaks", "RenderScale", "1.0", buf, sizeof buf, ini);
     g_render_scale = atof(buf);

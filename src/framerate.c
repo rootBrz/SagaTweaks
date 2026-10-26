@@ -715,8 +715,8 @@ static float *__cdecl VelRebuild(float *dst, float *src, float inv_dt)
      * with the step. Against a wall the speed that enters the sweep settles at f*v/(s + f*(1 - s)) with the blend s;
      * the 60 fps value (s = 1) is f60*v. s is lowered so that both agree (measured: 0.172 instead of 0.200 with s = 60 dt; 0.19 instead of 1/6 fits the measured jumps).
      */
-    s = s * (1.0f - SMOOTH60) / (1.0f - SMOOTH60 * s);
     if (g_fix_contact && s < 1.0f) {
+        s = s * (1.0f - SMOOTH60) / (1.0f - SMOOTH60 * s);   /* only for steps below 1/60 s: the divisor stays positive */
         for (i = 0; i < 3; i++)
             dst[i] = s * dst[i] + (1.0f - s) * pre[i];
     }
