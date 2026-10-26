@@ -30,7 +30,7 @@ int g_log_fps;
 int g_probe_sweep;
 int g_probe_hero;
 int g_fix_gameplay = 1;
-int g_logic_hz = 120;   /* upper bound of game logic updates per second, 0 = every frame */
+int g_logic_hz;   /* upper bound of game logic updates per second, 0 = every frame */
 int g_live_ini;
 
 void ApplyMaxFps(void)
@@ -1104,7 +1104,7 @@ static void LiveIniPoll(void)
     frames = 0;
     g_fix_physics = GetPrivateProfileIntA("SagaTweaks", "FixJumpPhysics", 1, g_ini_path);
     g_fix_counters = GetPrivateProfileIntA("SagaTweaks", "FixFrameCounters", 1, g_ini_path);
-    g_logic_hz = GetPrivateProfileIntA("SagaTweaks", "LogicHz", 120, g_ini_path);
+    g_logic_hz = GetPrivateProfileIntA("SagaTweaks", "LogicHz", 0, g_ini_path);
     g_fix_contact = GetPrivateProfileIntA("SagaTweaks", "FixContactVelocity", 1, g_ini_path);
     g_max_fps = GetPrivateProfileIntA("SagaTweaks", "MaxFPS", 0, g_ini_path);
     ApplyMaxFps();

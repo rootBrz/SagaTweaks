@@ -60,7 +60,7 @@ jobs:
           fi
           {
             echo "changelog<<EOF_NOTES"
-            cat notes.md
+            sed 's/^- //' notes.md   # Nexus shows its own bullets: no "- " at the start of a line
             echo "EOF_NOTES"
           } >> "$GITHUB_OUTPUT"
           {

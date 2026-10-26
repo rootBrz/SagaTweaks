@@ -24,7 +24,7 @@ void ConfigLoad(const char *ini)
     INI_INT(g_refresh_override, "RefreshRate", 0);
     INI_INT(g_fix_counters, "FixFrameCounters", 1);
     INI_INT(g_fix_physics, "FixJumpPhysics", 1);
-    INI_INT(g_logic_hz, "LogicHz", 120);
+    INI_INT(g_logic_hz, "LogicHz", 0);
     INI_INT(g_fix_contact, "FixContactVelocity", 1);
     INI_INT(g_prompt_glyphs, "PromptGlyphs", 1);
     all = GetPrivateProfileIntA("SagaTweaks", "ButtonPrompts", 0, ini);

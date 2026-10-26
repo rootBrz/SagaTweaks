@@ -50,7 +50,7 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `FixFrameCounters` | 1 | Frame-rate independent clocks. |
 | `FixGameplayRates` | 1 | Fixes the other per-frame rates found by the code audit (see `docs/AUDIT.md`). |
 | `FixContactVelocity` | 1 | Keeps part of the old velocity after a contact at short steps. |
-| `LogicHz` | 120 | Most game logic updates per second (0 = every frame). |
+| `LogicHz` | 0 | Most game logic updates per second (0 = every frame). |
 | `FixJumpPhysics` | 1 | Jump impulse corrected to the 60 fps lift and height. |
 
 Debug-only keys (`LogFPS`, `LiveIni` (rereads `LogicHz`, `MaxFPS` and the fix switches once a second), `ProbeSweep` (logs the hero's collision sweeps), `ProbeHero` (one log line per logic update of player 1 near the log of Speeder Showdown: position, velocity, flags, input; read with `tools/audit/trace_jumps.py`), `TraceRT` (also enables `<ini>.scale` run-time scale changes and depth diagnostics), `TracePasses`, `SkipPass`, `SkipScaledPass`,
