@@ -235,6 +235,6 @@ void CutsceneFrame(int game, int *out, int cur, int titles)
         ((FrameFn)ADDR_FRAME_FUNC)(game, out);
         g_cutscene_skipping = 1;
     } else {
-        ((FrameFn)ADDR_FRAME_FUNC)(game, out);
+        FramerateGameFrame(game, out);
     }
 }

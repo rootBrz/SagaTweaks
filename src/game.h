@@ -68,19 +68,70 @@
 #define COUNTER_HZ         60.0f
 
 /*
- * Vertical physics at a fixed 60 Hz. Jump height is the integral of explicit Euler
- * steps (sub_4ABAC0 eases the vertical velocity, sub_55D2B0 adds velocity * dt to
- * the height), so a smaller step gives a slightly lower jump: 0.770 at 60 fps but
- * 0.762 at 120 fps, enough to fail borderline obstacles. Both are therefore fed a
- * physics time step that is a multiple of 1/60 s and zero on frames in between.
- * Horizontal movement keeps the real frame time, only height is stepped.
+ * Collision tolerance. The swept-sphere "collide and slide" routine sub_68F940 (character vs world) loads two
+ * constants into its work block: the "very close distance" 0.005 (flt_7597A4, block +160) and 5e-6
+ * (flt_76E818, block +164). The first is a FRACTION of the step (hit time t = d0 / (d0 - d1)), so its size in
+ * world units is 0.005 x step: 1e-4 at 60 fps, 7e-6 at 850 fps, below the float resolution at the hero's
+ * coordinates. The two loads read the mod's values; the fraction is scaled up for short steps.
  */
-#define ADDR_PHYS_VERTICAL 0x004ABAC0u  /* sub_4ABAC0(player, ...): vertical velocity update */
-#define ADDR_PHYS_RESUME   0x004ABAC9u
-#define ADDR_POS_VY_1      0x0055D345u  /* fmul ds:flt_925018 after fld [esi+78h] (operand) */
-#define ADDR_POS_VY_2      0x0055D3B4u
-#define ADDR_POS_VY_3      0x0055D475u
-#define ADDR_POS_VY_4      0x0055D577u
+#define ADDR_SWEEP         0x0068F940u  /* sub_68F940(pos, move, flags, idx, a5, radius y, radius, 0, 0, mask): swept sphere */
+#define ADDR_SWEEP_RESUME  0x0068F949u
+#define ADDR_CLOSE_DIST_1  0x0068FAFEu  /* fld ds:flt_7597A4 */
+#define ADDR_CLOSE_DIST_2  0x0068FB10u  /* fld ds:flt_76E818 */
+
+/*
+ * Effect / script timeline. sub_491D50 ticks sub_686950(1.0) once per logic frame; the function adds (int)a1 to the
+ * tick counter dword_2962B48 and steps its effect spawns by a1 / 60 s. With logic frames at 860 per second the
+ * timeline ran 14x fast. The call goes through a wrapper that passes whole 1/60 s ticks from a time accumulator.
+ */
+#define ADDR_SCRIPT_TICK_CALL 0x004922ADu
+#define ADDR_SCRIPT_TICK_FN   0x00686950u
+
+/* Per-call systems of sub_491D50 that assume one call per 1/60 s: grass chains (sub_544420), wind strands
+ * (sub_546380), sway phase (sub_545A80), wobble springs (sub_66CC60). */
+#define ADDR_CHAIN_CALL       0x004922B7u
+#define ADDR_CHAIN_FN         0x00544420u
+#define ADDR_STRAND_CALL      0x004922CDu
+#define ADDR_STRAND_FN        0x00546380u
+#define ADDR_SWAY_CALL        0x004922D7u
+#define ADDR_SWAY_FN          0x00545A80u
+#define ADDR_WOBBLE_CALL      0x0049233Bu
+#define ADDR_WOBBLE_FN        0x0066CC60u
+
+/*
+ * Velocity after a collision. sub_416D60 moves the player with velocity * dt through the swept collision and
+ * then rebuilds velocity = resolved movement / dt (sub_5B3830(player + 104, move, 1 / dt) at 0x4178D6). A wall
+ * removes the push into it every frame and the next frame the velocity only eases back by rate * dt, so the
+ * steady push into a wall (and the slide up a slope) is proportional to the frame time. The call goes through
+ * a wrapper that keeps (1 - 60 dt) of the pre-collision velocity, which is what makes 60 fps behave as it does.
+ */
+#define ADDR_VEL_REBUILD   0x004178D6u  /* call sub_5B3830 */
+#define ADDR_VEL_REBUILD_FN 0x005B3830u
+
+/*
+ * Contact response offsets. Every time the character slides along a surface the collision code pushes the
+ * movement away from it by fixed world units (double constants shared from .rdata): 0.0003 along the plane
+ * normal in the projection helpers sub_677FB0 / sub_678010 and in sub_6786F0, 0.0006 / 0.0009 / 0.0015 /
+ * 0.0035 in the slope and wall responses of sub_6786F0, 0.01 x normal.y as an upward kick there, and
+ * 0.004 x normal.y lifted after a hit in sub_678F60. They are per contact, i.e. per frame: at 850 fps they
+ * push the hero off the tree 14x harder per second than the game was tuned for (and make it creep on slopes).
+ * Each load is redirected to a double scaled by the step length.
+ */
+
+/*
+ * Foliage wind. sub_5EC3D0 (the sway offsets of plants) takes its phase from dword_97390C, which the
+ * renderer frame function sub_60AFF0 increments once per frame (add dword_97390C, 1). The wind therefore
+ * blew at fps / 60 times its speed. The add is replaced by a stub that adds 60 steps per second of real time.
+ */
+#define ADDR_WIND_PHASE    0x0097390Cu
+#define ADDR_WIND_TICK     0x0060B551u  /* add dword_97390C, 1 (7 bytes) */
+#define ADDR_WIND_RESUME   0x0060B558u
+
+/*
+ * Jump height. See JumpFix in framerate.c: the jump impulse is corrected so the apex matches the 60 fps
+ * one at any frame rate. Player objects are dword_93D7F0[slot]; +108 is the vertical speed, +84 the type
+ * whose physics block (+36) holds the gravity at +36.
+ */
 
 /*
  * Render scale. The video mode list ends at the desktop resolution. Entries for
@@ -114,6 +165,21 @@
 #define ADDR_RT_W_3  0x00605995u
 #define ADDR_BACKBUFFER_W 0x02976700u
 #define ADDR_BACKBUFFER_H 0x02976704u
+
+/*
+ * VSync and window mode. sub_6E3940 (device create / reset, Accept in Video Settings calls it with
+ * 1) fills the present parameters: PresentationInterval is the constant 1 (mov [esi+16Ch], ebx) and
+ * Windowed comes from the requested-windowed byte at device+65Ch. When windowed and the argument
+ * is set it moves the window to nWidth, nHeight, X, Y (globals), X / Y < 0 centre it. The window
+ * style (overlapped for windowed, popup otherwise) is chosen by the creation code, so it is set
+ * again here when the mode changes.
+ */
+#define ADDR_PRESENT_INTERVAL 0x006E3A19u
+#define ADDR_DEVICE_RESET     0x006E3940u  /* sub_6E3940(this, moveWindow) (thiscall) */
+#define ADDR_GAME_WINDOW      0x00924864u  /* hWnd */
+#define ADDR_WINDOW_RECT      0x0082647Cu  /* nWidth, nHeight, X, Y */
+#define DEVICE_MODE_INDEX_OFS 0x660        /* mode table index in use */
+#define DEVICE_WINDOWED_OFS   0x65C        /* byte: windowed requested */
 
 #define ADDR_REFRESH_LOAD  0x006E3AE8u  /* mov eax,[eax+8]; mov [esi+168h],eax */
 #define ADDR_REFRESH_BACK  0x006E3AF1u  /* jz short ... (flags from the earlier test are kept) */
@@ -173,4 +239,18 @@ typedef int (__cdecl *PauseRowFn)(int menu, const char *text);
 
 typedef void (__attribute__((thiscall)) *DeviceRefreshFn)(void *self, int slots);
 
-typedef void (__cdecl *PhysFn)(int player, int *a2, float a3, float a4, float *a5);
+typedef int (__attribute__((thiscall)) *ApplyDeviceFn)(void *device, int move_window);
+
+/*
+ * Hero physics that is applied once per call with a fixed factor (written for 60 calls/s). Each site loads its
+ * constant from memory, so the operand is redirected to a variable holding constant^(dt*60).
+ */
+#define ADDR_DAMP_STEPUP      0x0068F5C5u   /* sub_68EE40: fmul qword 0.75, vertical velocity on a step-up hit  */
+#define ADDR_DAMP_BOOST       0x004AB754u   /* sub_4AB620: fmul qword 0.5, speed multiplier +3140               */
+#define ADDR_DAMP_BOOST2      0x004AB5E1u   /* sub_4AB5A0: same halving of +3140, second copy                    */
+#define ADDR_DAMP_PUSH        0x004AEB87u   /* sub_4AC620: fld qword 0.5, platform terms +3864 and +3872        */
+#define ADDR_DAMP_BLEND       0x004AEB53u   /* sub_4AC620: 1 - blend (+3480) applied to the same two terms      */
+#define ADDR_HEADING_TRUNC    0x00550121u   /* sub_550100: call sub_6E6B90, heading step truncated to int       */
+#define ADDR_TRUNC_FN         0x006E6B90u
+#define ADDR_ANGLE_APPROACH   0x00550070u   /* sub_550070(from, to, rate): angle lerp, result truncated to int  */
+#define ADDR_WALLPUSH_STEP    0x0059BE31u   /* sub_59BD40: per-call step of the wall-push timer +3524 (dt <= 1/30 branch) */

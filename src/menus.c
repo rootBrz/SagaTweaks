@@ -6,10 +6,10 @@
 #include "all.h"
 
 /*
- * Native "Render Scale" row on the Video Settings page (menu id 0x401), placed just above the
- * Back / Accept row. The page's draw routine (sub_511EA0) draws its rows with sub_50F740, which
+ * Native "Render Scale", "Window Mode" and "VSync" rows on the Video Settings page (menu id 0x401),
+ * placed just above the Back / Accept row. The page's draw routine (sub_511EA0) draws its rows with sub_50F740, which
  * also counts them for the cursor range; a call is patched in right before the Back row to draw
- * one more. The row sits at index 4 and pushes Back to index 5, so the update wrapper handles
+ * three more. The rows sit at index 4-6 and push Back to index 7, so the update wrapper handles
  * the new row itself and shows the original update routine Back as row 4 again. Changing the
  * value rebuilds the render targets (sub_6E2D20, the routine a device reset uses) and stores
  * the choice in the ini.
@@ -36,7 +36,11 @@
 
 #define SCALE_ROW             4
 
-#define BACK_ROW              5
+#define WINDOW_ROW            5
+
+#define VSYNC_ROW             6
+
+#define BACK_ROW              7
 
 #define MENU_LEFT_OFS         0x5C
 
@@ -69,6 +73,10 @@ void __cdecl VideoRowDraw(int menu)
 
     snprintf(text, sizeof text, "Render Scale: %d%%", (int)(g_render_scale * 100.0 + 0.5));
     ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, text, *(int *)ADDR_MENU_ALPHA);
+    snprintf(text, sizeof text, "Window Mode: %s", g_window_mode_names[g_window_mode]);
+    ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, text, *(int *)ADDR_MENU_ALPHA);
+    snprintf(text, sizeof text, "VSync: %s", g_vsync ? "On" : "Off");
+    ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, text, *(int *)ADDR_MENU_ALPHA);
 }
 
 /* Replaces "mov ecx, offset device" in sub_511EA0; the menu pointer is in edi there. */
@@ -98,6 +106,24 @@ static void StepRenderScale(int step)
     Log("render scale changed from the menu");
 }
 
+/* Window mode and VSync: store the choice and let the game reset its device. */
+static void StepDisplay(int row, int step)
+{
+    char buf[16];
+
+    if (row == WINDOW_ROW) {
+        g_window_mode = (g_window_mode + step + WINDOW_MODES) % WINDOW_MODES;
+        snprintf(buf, sizeof buf, "%d", g_window_mode);
+        WritePrivateProfileStringA("SagaTweaks", "WindowMode", buf, g_ini_path);
+    } else {
+        g_vsync = !g_vsync;
+        snprintf(buf, sizeof buf, "%d", g_vsync);
+        WritePrivateProfileStringA("SagaTweaks", "VSync", buf, g_ini_path);
+    }
+    WindowApply();
+    *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
+}
+
 static int __cdecl VideoMenuUpdate(int menu)
 {
     short *row = (short *)(menu + MENU_CUR_ROW_OFS);
@@ -106,12 +132,16 @@ static int __cdecl VideoMenuUpdate(int menu)
     if (*(int *)(menu + MENU_BACK_OFS))
         return ((MenuUpdateFn)VID_MENU_UPDATE_ORIG)(menu);
 
-    if (*row == SCALE_ROW) {
+    if (*row >= SCALE_ROW && *row < BACK_ROW) {
         int step = *(int *)(menu + MENU_RIGHT_OFS) || *(int *)(menu + MENU_SELECT_OFS) ? 1 :
                    *(int *)(menu + MENU_LEFT_OFS) ? -1 : 0;
 
-        if (step)
-            StepRenderScale(step);
+        if (step) {
+            if (*row == SCALE_ROW)
+                StepRenderScale(step);
+            else
+                StepDisplay(*row, step);
+        }
         return 0;
     }
     if (*row == BACK_ROW) {

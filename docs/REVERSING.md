@@ -170,10 +170,110 @@ Settings screen shows the real number. Verified by an in-mod fps counter (`LogFP
 ### Frame-rate independence
 Two separate causes found by the scan + A/B tools: (1) clock objects with a frame counter at
 `clock+12`, updated by `sub_548FE0`; detoured (`ClockUpdate`) so counters advance at 60/s of real
-time; (2) vertical velocity update `sub_4ABAC0` integrates with the frame dt, giving different jump
-heights at different fps. A detour feeds it a dt quantised to 1/60 s steps with an accumulator
-(ticks accumulate, zero-tick frames pass 0). The menu highlight blink turned out to be time based
+time; (2) vertical movement. First attempt: gate `sub_4ABAC0` (vertical velocity) and the height
+integration to 60 Hz ticks with an accumulator. It fixed the apex but was wrong in two ways found later:
+the committed height still advances every frame by `vy * real dt`, so a jump impulse landing mid-tick lost up to
+`speed / fps` of height (random +/- 0.02 of 0.46 at 120 fps), and the gated gravity made the hero slowly slide
+on slopes at 850 fps (drift 0.015 units/s, exactly 0 with the gating off). The gating was removed.
+
+What actually breaks at high fps (jump `vy` is `player+108`, committed height `+96`, candidate `+132`):
+* The jump is `vy = v0` (2.3) set at the end of a frame; the next frame lifts the player by `v0 * dt`:
+  0.038 at 60 fps, 0.002 at 850 fps. On a platform (the pallet in Speeder Showdown) the contact test
+  tolerates that, lands the player again and resets `vy` to 0: the jump is cancelled one frame after it
+  started (17 of 18 scripted jumps failed; the traced frame sequence was `vy 2.30, f641 0` then `vy 0, f641 2`).
+  Ordinary ground does not have this check, which is why only platforms failed.
+* With real-time integration the apex is `v^2 / 2g + v dt / 2` instead of the 60 fps value 0.4616
+  (4 % lower at 850 fps).
+Fix (`JumpFix`): when `vy` jumps up by >= 1 from <= 0.5 (at most once per 0.3 s, only above 63 fps) the
+player is lifted at once by `v0/60 - v dt` (so after one frame it sits at the 60 fps first-frame height) and `v`
+is solved from `lift + v^2/2g + v dt/2 = apex60` with the character's own gravity (`*(*(player+84)+36)+36`).
+Verified: 8/8 jumps from the pallet at 0.46 (60 fps reference 0.4616), 0/6 without; ground jumps 0.459-0.460.
+Test setup: write the level entry pointer into `dword_951B80` to load a level directly, poke the jump bit into
+the controller (`player+3236`, +4/+8) and poll `player+96`. `LiveIni=1` re-reads `FixJumpPhysics`,
+`FixFrameCounters` and `MaxFPS` once a second so the fixes can be flipped without restarting.
+
+### Per-call systems in the logic update (grass, wind, wobble, hero damping)
+The logic update `sub_491D50` is written as "one call = 1/60 s" in many places, not only the two causes above.
+At 850 fps the grass wobbled about 14x too fast (the user's words: "constant wobble even when I stand still"), and
+with `LogicHz=60` (logic update at most 60x per second) it was right, which proved the culprit is inside
+the update and not in drawing. Finding it:
+
+* A/B memory diff (`tools/ab_sample.py`, snapshots of `0x7EF000-0x29AB000` two seconds apart, uncapped vs
+  `LogicHz=60`) lists every global that changes once per logic call: `0x2962B48` (effect timeline),
+  `0x296205C/2060` (effect clocks), `0x2983A40/A44/A48` and `0x2983A4C/A54/A58` (wind and sway phase of the
+  grass), audio spawn counters and housekeeping round-robins.
+* Complete audit: IDA Hex-Rays pseudocode of every function reachable from `sub_491D50` (1626 functions) was split into
+  77 shards of about 1300 lines and read by reviewers (one Haiku agent per shard, brief in `AUDIT_TASK.md`),
+  who wrote one finding per line: location, quoted code, why it depends on the call rate, per-second form.
+  Regex detectors were tried first and rejected: they flag every `+=` and say nothing about units. Every
+  claim was then checked against the code and the live value before it was patched; many were false (below).
+
+Foliage, all called once per frame from `sub_491D50` (call sites `0x4922AD..0x49233B`):
+* `sub_546380` / `sub_545A80`: `dword_2983A40/A48/A44 += 501/133/377` and `dword_2983A4C/A54/A58 += 501/133/377`
+  (wind and sway phase) plus lerps with literal factors 0.2 and 0.05.
+* `sub_66CC60`: the wobble. Unit-step Euler spring (`v += -k x ... ; x += v`), countdown timers in calls
+  (`--word`, set to 128 = 2.1 s at 60 fps).
+* `sub_544420`: grass chain contact with a cooldown of 5 calls.
+* `sub_686950(1.0)`: the effect timeline, `dword_2962B48 += (int)a1`.
+* `dword_97390C` (`sub_60AFF0`, `add dword_97390C, 1` at `0x60B551`): wind phase read by `sub_5EC3D0`.
+
+They are scripted at fixed steps, so the faithful fix is to keep the step and call each one as often as at 60 fps:
+`ScriptTick` (the patched call at `0x4922AD`) accumulates `dt * 60`, takes `n = (int)(acc + 0.05)` and stores it
+in `g_steps`; `sub_686950` gets `n`, and the call sites of `sub_544420`, `sub_546380`, `sub_545A80` and
+`sub_66CC60` are redirected to wrappers that call the original `g_steps` times (0 on frames where less than
+1/60 s has passed, 2 or more below 30 fps). The wind phase at `0x60B551` has its own 60/s accumulator. Below
+60 fps `g_steps` is 1 on average and the game behaves as before.
+
+Hero physics, per-call constants that were multiplied or added every call (all x87 constant operands, so the
+operand address is patched to a variable `c^min(1, dt*60)`, updated every logic frame in
+`UpdateCollisionTolerance`):
+* `sub_68EE40` step-up hit: vertical velocity `*= 0.75` (`0x68F5C5`). Velocity died 14x faster than at 60 fps
+  while the hero pushes up the rounded shoulder of the fallen tree.
+* `sub_4AB620`: speed multiplier `+3140 *= 0.5` (`0x4AB754`).
+* `sub_4AC620`: platform terms `+3864` and `+3872` halved (`0x4AEB87`, one shared constant load) and multiplied
+  by `1 - blend` where `+3480` is the time since landing (`0x4AEB53`; replaced by a stub that stores
+  `(1 - blend)^min(1,dt*60)`, flags and caller-saved registers preserved because `je` at `0x4AEB7B` still uses the
+  `cmp al,2` from before).
+* `sub_550100` (heading approach): `rate * dt` was truncated to int by `sub_6E6B90`, so a turn slower than
+  `fps` units/s never happened and every step lost up to one unit. The call at `0x550121` returns the integer part
+  plus 1 with probability equal to the fraction (`DitherTruncate`), so the mean turn rate is exact.
+* Collision (earlier): `veryClose` is a fraction of the step, so its constant is scaled up as the step shrinks; seven
+  fixed push-out doubles (`0.0003 .. 0.01`, `.rdata`) are scaled by `dt*60`; the velocity rebuilt after a sweep
+  (`0x4178D6`) is blended with the previous one (steady state = 60 fps).
+
+Looked suspicious, were fine (do not chase again):
+* `sub_434A20` `(dword_925068 + id) % v113`: `dword_925068` is the frame counter already advanced at 60/s by `ClockUpdate`.
+* `sub_4ABAC0` `flt_925018 < 0.016666668`: both formulas give the 60 fps result below 1/60 s.
+* `sub_678410`: `velocity *= work+88` is a transform into ellipsoid space (`+88 = 1/radius`), not drag. `sub_678580`
+  subtracts `+160` (the sweep tolerance fraction), not a timer.
+* `sub_550070`, `sub_54FB40`, `sub_54FB80`, `sub_54FAD0` look like fixed-factor smoothers but multiply the factor by
+  `flt_925018` inside.
+* `sub_690610`: see the next paragraph.
+
+The whole-loop audit that produced the list above (how the data is built, the reviewer briefs, the false leads and the
+still open log-climb problem) is described in `docs/AUDIT.md`.
+
+Test setup for all of this: `LogicHz=0` (logic every frame), `VSync=0`, `RenderScale=0.5`, level loaded via
+`dword_951B80` as above, `LiveIni=1` to flip `FixFrameCounters` / `LogicHz` without restarting.
+
+A wrong turn worth remembering: `sub_690610` (the 0x65xxxx-0x69xxxx "grass" cluster is the particle/effect
+system and its editor) looks like a per-frame update with the constant `flt_8108E4` = 1/60 in the data
+section, so I gated it to 60 Hz. But the game rewrites `flt_8108E4` with the real frame time every frame, so it
+was already correct, and the gate made effects run slow at high fps. Check the live value, not the initial one.
+The menu highlight blink turned out to be time based
 already.
+
+### VSync and window mode
+`sub_6E3940` (device create / reset; Accept in Video Settings calls it) fills the present parameters:
+`PresentationInterval` is the constant 1 (`mov [esi+16Ch], ebx` at `0x6E3A19`, redirected to a stub
+reading `g_present_interval`) and `Windowed` comes from the byte at `device+65Ch`. With a windowed device
+and argument 1 it moves the window to the globals `nWidth, nHeight, X, Y` (`0x82647C`, in that order;
+X/Y < 0 centre). The style (`0xCF0000` overlapped, else popup) is picked at window creation, so a mode
+change sets it with `SetWindowLong`, fills those globals, sets `+65Ch` and calls the same reset.
+Borderless = windowed device + popup window at the desktop size. Menu rows reuse the Render Scale row
+mechanism (three rows drawn before Back, update wrapper maps Back to row 4 for the original code).
+Mistake worth remembering: I first assumed the globals were `X, Y, nWidth, nHeight` and overwrote other
+settings; check the order in the data, not the decompiler's variable names.
 
 ### Render scale
 The game creates its effect render targets from the backbuffer size in three functions; the size
@@ -298,3 +398,11 @@ between pressing Start and gameplay.
 4. Prefer calling the game's own routines; patch the smallest thing; verify bytes first.
 5. Log state around it from inside the mod, run, look at numbers, then at pixels.
 6. Test the unhappy paths (other chapter, other device, held key, device unplugged).
+
+## Tried and dropped: fixed 60 Hz logic with interpolated drawing
+
+Logic at exactly 1/60 s per step plus blending the c16 world x view x projection matrix of each mesh draw between the
+last two steps was built and tested on the Deck (Speeder Showdown, 850 fps). The user judged the picture "really bad" and
+the log was climbable with the variable step anyway, so it was removed. Findings worth keeping: every mesh draw is
+preceded by one `SetVertexShaderConstantF(16, 4)` (the matrix), then `40x1`, `28x11` (bones), `111x1` per draw; at 60 fps
+all 10 jumps rose to the full height while at 850 fps they split into 0.50 (fail) and 0.535 (success) rises.

@@ -17,9 +17,15 @@ void ConfigLoad(const char *ini)
     INI_INT(g_hot_switch, "HotSwitchInput", 1);
     INI_INT(g_start_button, "StartButton", 7);
     INI_INT(g_max_fps, "MaxFPS", 0);
+    INI_INT(g_vsync, "VSync", 1);
+    INI_INT(g_window_mode, "WindowMode", WINDOW_FULLSCREEN);
+    if (g_window_mode < 0 || g_window_mode >= WINDOW_MODES)
+        g_window_mode = WINDOW_FULLSCREEN;
     INI_INT(g_refresh_override, "RefreshRate", 0);
     INI_INT(g_fix_counters, "FixFrameCounters", 1);
     INI_INT(g_fix_physics, "FixJumpPhysics", 1);
+    INI_INT(g_logic_hz, "LogicHz", 120);
+    INI_INT(g_fix_contact, "FixContactVelocity", 1);
     INI_INT(g_prompt_glyphs, "PromptGlyphs", 1);
     all = GetPrivateProfileIntA("SagaTweaks", "ButtonPrompts", 0, ini);
     g_prompt_style[0] = GetPrivateProfileIntA("SagaTweaks", "ButtonPromptsP1", all, ini);
@@ -46,6 +52,11 @@ void ConfigLoad(const char *ini)
 
     /* debugging aids */
     INI_INT(g_log_fps, "LogFPS", 0);
+    INI_INT(g_probe_sweep, "ProbeSweep", 0);
+    INI_INT(g_probe_hero, "ProbeHero", 0);
+    INI_INT(g_fix_gameplay, "FixGameplayRates", 1);
+    INI_INT(g_live_ini, "LiveIni", 0);
+    INI_INT(g_probe_consts, "ProbeConsts", 0);
     INI_INT(g_trace_rt, "TraceRT", 0);
     INI_INT(g_dump_textures, "DumpTextures", 0);
     INI_INT(g_skip_pass, "SkipPass", -1);

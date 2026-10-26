@@ -124,6 +124,10 @@ static void **g_hooked_vtable;
 static int g_rt0_scaled;
 
 int g_trace_rt; /* debug: log device calls for a few frames */
+
+int g_probe_consts;   /* debug: log shader constants that change every frame */
+
+void ProbeFrame(void);
 static int g_trace_budget;
 
 static void Trace(const char *fmt, ...)
@@ -260,6 +264,8 @@ typedef HRESULT (STDMETHODCALLTYPE *PresentFn)(IDirect3DDevice9 *, const RECT *,
 typedef HRESULT (STDMETHODCALLTYPE *ResetFn)(IDirect3DDevice9 *, D3DPRESENT_PARAMETERS *); /* a cutscene skip is running: the screen is kept black */
 static PresentFn g_orig_present;
 
+LONGLONG g_present_ticks;   /* time spent inside Present, for LogFPS */
+
 static ResetFn g_orig_reset;
 
 static IDirect3DSurface9 *g_virtual_bb;
@@ -332,6 +338,18 @@ static HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9 *dev, const RECT *
             }
             IDirect3DSurface9_Release(bb);
         }
+    }
+    if (g_probe_consts)
+        ProbeFrame();
+    if (g_log_fps) {
+        LARGE_INTEGER a, b;
+        HRESULT hr;
+
+        QueryPerformanceCounter(&a);
+        hr = g_orig_present(dev, src, dst, wnd, dirty);
+        QueryPerformanceCounter(&b);
+        g_present_ticks += b.QuadPart - a.QuadPart;
+        return hr;
     }
     return g_orig_present(dev, src, dst, wnd, dirty);
 }
@@ -564,8 +582,70 @@ static void ResendScreenConst(IDirect3DDevice9 *dev)
     g_orig_set_ps_const(dev, SCREEN_CONST_REG, v, 1);
 }
 
+/*
+ * Debug (ProbeConsts=1): which vertex shader constants change from frame to frame, and how fast.
+ * The first value set for a register in a frame is compared with the one of the previous frame; a
+ * constant that moves the same amount per frame at any fps is a per-frame clock.
+ */
+static struct { float first[4], prev[4]; int set, valid; double sum; int frames; } g_probe[256];
+
+static void ProbeSet(UINT start, const float *data, UINT count)
+{
+    UINT i;
+
+    for (i = 0; i < count && start + i < 256; i++)
+        if (!g_probe[start + i].set) {
+            memcpy(g_probe[start + i].first, data + 4 * i, 16);
+            g_probe[start + i].set = 1;
+        }
+}
+
+void ProbeFrame(void)
+{
+    static LARGE_INTEGER freq, last;
+    LARGE_INTEGER now;
+    int r, k;
+
+    for (r = 0; r < 256; r++) {
+        if (!g_probe[r].set)
+            continue;
+        if (g_probe[r].valid) {
+            for (k = 0; k < 4; k++)
+                g_probe[r].sum += fabs((double)g_probe[r].first[k] - (double)g_probe[r].prev[k]);
+            g_probe[r].frames++;
+        }
+        memcpy(g_probe[r].prev, g_probe[r].first, 16);
+        g_probe[r].valid = 1;
+        g_probe[r].set = 0;
+    }
+    QueryPerformanceCounter(&now);
+    if (!freq.QuadPart) {
+        QueryPerformanceFrequency(&freq);
+        last = now;
+    }
+    if ((double)(now.QuadPart - last.QuadPart) / (double)freq.QuadPart >= 3.0) {
+        static int lines;
+        double span = (double)(now.QuadPart - last.QuadPart) / (double)freq.QuadPart;
+
+        if (g_log && lines++ < 12) {
+            for (r = 0; r < 256; r++)
+                if (g_probe[r].frames > 10 && g_probe[r].sum > 0.0)
+                    fprintf(g_log, "probe c%d: %.3f/s, %.2f/frame, now %.3f %.3f %.3f %.3f\n", r, g_probe[r].sum / span,
+                            g_probe[r].sum / g_probe[r].frames, g_probe[r].prev[0], g_probe[r].prev[1],
+                            g_probe[r].prev[2], g_probe[r].prev[3]);
+            fprintf(g_log, "probe ----\n");
+            fflush(g_log);
+        }
+        for (r = 0; r < 256; r++)
+            g_probe[r].sum = 0, g_probe[r].frames = 0;
+        last = now;
+    }
+}
+
 static HRESULT STDMETHODCALLTYPE HookSetVSConst(IDirect3DDevice9 *dev, UINT start, const float *data, UINT count)
 {
+    if (g_probe_consts && data)
+        ProbeSet(start, data, count);
     if (g_trace_rt && data)
         TraceConstants("VS", start, data, count);
     return SetConstFiltered(dev, g_orig_set_vs_const, start, data, count);

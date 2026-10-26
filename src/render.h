@@ -13,3 +13,4 @@ extern int g_trace_passes;
 int RenderReady(void);
 void RenderInstall(void);
 void RenderFrame(int cur, int titles);
+extern int g_probe_consts;

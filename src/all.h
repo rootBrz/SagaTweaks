@@ -7,6 +7,7 @@
 #include "startup.h"
 #include "framerate.h"
 #include "render.h"
+#include "window.h"
 #include "texdump.h"
 #include "prompts.h"
 #include "menus.h"

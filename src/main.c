@@ -6,6 +6,7 @@
  *   startup.c    skip boot logos and the title screen
  *   cutscene.c   skip cutscenes with Start
  *   framerate.c  FPS cap, refresh rate, clock / jump-physics fixes
+ *   window.c     VSync and window mode (fullscreen / windowed / borderless)
  *   render.c     render scale (scaled targets, depth twin, virtual backbuffer), D3D9 hooks
  *   prompts.c    Xbox / PlayStation button glyphs, per player
  *   input.c      keyboard / gamepad hot-switching, Start-only joining, drop-out recovery
@@ -35,6 +36,7 @@ static void __cdecl FrameHook(int game, int *out)
     MenusFrame();
     PromptsFrame();
     FramerateFrame();
+    WindowFrame();
     InputFrame(game);
     RenderFrame(cur, titles);
     CutsceneFrame(game, out, cur, titles);   /* runs the game's own frame (or the cutscene skip) */
@@ -48,7 +50,7 @@ static DWORD WINAPI PatchThread(LPVOID param)
 
     (void)param; /* wait for SteamStub to decrypt .text: the expected bytes must be there */
     for (tries = 0; tries < PATCH_WAIT_TRIES; tries++) {
-        if (StartupReady() && FramerateReady() && RenderReady() && MenusReady() && InputReady() &&
+        if (StartupReady() && FramerateReady() && WindowReady() && RenderReady() && MenusReady() && InputReady() &&
             PromptsReady() && Matches(ADDR_FRAME_CALL, k_frame_call_orig, sizeof k_frame_call_orig))
             break;
         Sleep(1);
@@ -60,6 +62,7 @@ static DWORD WINAPI PatchThread(LPVOID param)
 
     StartupInstall();
     FramerateInstall();
+    WindowInstall();
     RenderInstall();
     MenusInstall();
     InputInstall();

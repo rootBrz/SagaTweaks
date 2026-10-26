@@ -2,6 +2,15 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## Unreleased
+
+- Fixed: jumping at high frame rates. The first frame of a jump lifts the player by only speed x frame time, which is too little for the contact test of platforms (the pallet at the start of Episode VI "Speeder Showdown"), so the jump was cancelled and the fallen tree could not be cleared. The jump impulse now gives the same first-frame lift and the same apex as at 60 fps, at any frame rate. Jump height used to be up to 4 % lower at 120 fps and above even on the ground.
+- Fixed: grass and foliage ran about 14x too fast at high frame rates (constant wobble when standing still). The wind and sway phase, the wobble springs, the grass chains and the effect timeline are written for one step per 1/60 s; they are now stepped 60 times per second of real time at any frame rate.
+- Fixed: slow turning and stalled heading changes at high frame rates (angle steps were truncated to whole units every frame), a missed 0.001 contact push-out, and the wall-push timer, which fired after 4 frames (5 ms at 850 fps) instead of 67 ms.
+- Fixed: more per-frame gameplay rates found by a whole-loop code audit: 28 `(int)(rate x dt)` truncations that lost their fraction at high frame rates (turning, spinning and sliding entities stalled), the lightning arc's velocity kick on the hero, the rope damping, several per-call rotation steps and timers, hero knockback and object pushes, particle emitter lifetimes, and two call-counted state counters. They can be disabled with `FixGameplayRates=0`.
+- Fixed: hero physics that decayed per frame instead of per second at high frame rates (velocity on the step-up over the fallen tree in Speeder Showdown, platform and speed-boost terms, slow turning).
+- New: **VSync** and **Window Mode** (fullscreen / windowed / borderless windowed) rows in Video Settings; `VSync` and `WindowMode` in the ini. Changes apply at once.
+
 ## 1.0.2
 
 - No functional changes. Fixes the release workflow's Nexus Mods upload (wrong zip path).

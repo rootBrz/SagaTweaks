@@ -11,7 +11,8 @@ Linux specific.
 | Startup | Skips boot logos and the "Press any button" title screen (straight to the main menu). |
 | Cutscenes | **Start skips a cutscene** and every following part of the chapter intro, straight to gameplay. |
 | Frame rate | Removes the 85 fps cap, runs at the desktop refresh rate (shown in Video Settings). |
-| Frame-rate fixes | Clock counters, blink timers and jump physics behave as at 60 fps. |
+| Frame-rate fixes | Clock counters, blink timers, grass and foliage animation, collision response and jumps behave as at 60 fps (same jump height, jumps from platforms and over the fallen tree work, at 60 and 1000 fps). |
+| Display | **VSync** and **Window Mode** (fullscreen / windowed / borderless) rows in Video Settings. |
 | Render scale | 50-300 % internal resolution, native row in Video Settings. Effects and the HUD pass are depth-tested at the scaled size. |
 | FSAA | Row removed from Effects Settings: render scale supersamples the whole frame and replaces it. |
 | Input | Player 1 hot-switches keyboard / gamepad. A second gamepad joins as player 2 with **Start**; lost pads drop out cleanly and never lock the pause menu. |
@@ -29,7 +30,7 @@ Linux specific.
 
 ## Configuration
 
-The common options are on the in-game **Tweaks** page (render scale is in Video Settings); all of
+The common options are on the in-game **Tweaks** page (render scale, window mode and VSync are in Video Settings); all of
 them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 
 | Key | Default | Meaning |
@@ -43,11 +44,16 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `PromptGlyphs` | 1 | 0 leaves the original prompt art untouched. |
 | `MaxFPS` | 0 | FPS limit, 0 = unlimited (vsync still applies). |
 | `RefreshRate` | 0 | Force a refresh rate, 0 = desktop. |
+| `VSync` | 1 | 0 presents without waiting for the display (Video Settings row). |
+| `WindowMode` | 0 | 0 fullscreen, 1 windowed, 2 borderless windowed (Video Settings row). |
 | `RenderScale` | 1.0 | Internal resolution multiplier. |
 | `FixFrameCounters` | 1 | Frame-rate independent clocks. |
-| `FixJumpPhysics` | 1 | 60 Hz vertical physics steps. |
+| `FixGameplayRates` | 1 | Fixes the other per-frame rates found by the code audit (see `docs/AUDIT.md`). |
+| `FixContactVelocity` | 1 | Keeps part of the old velocity after a contact at short steps. |
+| `LogicHz` | 120 | Most game logic updates per second (0 = every frame). |
+| `FixJumpPhysics` | 1 | Jump impulse corrected to the 60 fps lift and height. |
 
-Debug-only keys (`LogFPS`, `TraceRT` (also enables `<ini>.scale` run-time scale changes and depth diagnostics), `TracePasses`, `SkipPass`, `SkipScaledPass`,
+Debug-only keys (`LogFPS`, `LiveIni` (rereads `LogicHz`, `MaxFPS` and the fix switches once a second), `ProbeSweep` (logs the hero's collision sweeps), `ProbeHero` (one log line per logic update of player 1 near the log of Speeder Showdown: position, velocity, flags, input; read with `tools/audit/trace_jumps.py`), `TraceRT` (also enables `<ini>.scale` run-time scale changes and depth diagnostics), `TracePasses`, `SkipPass`, `SkipScaledPass`,
 `DumpTextures`) exist for reverse engineering; see `docs/REVERSING.md`.
 
 ## Build
@@ -68,7 +74,7 @@ Single-player only changes; no online component. Use at your own risk.
 ## Source layout
 
 `src/main.c` (entry, per-frame dispatch) and one module per feature: `startup`, `cutscene`,
-`framerate`, `render`, `prompts`, `input`, `menus`, `config`, plus `util` (patch primitives) and
+`framerate`, `window`, `render`, `prompts`, `input`, `menus`, `config`, plus `util` (patch primitives) and
 `texdump` (debug). Game addresses and signatures live in `src/game.h`. Each feature module exposes
 `<Name>Ready()` (are the expected game bytes present?), `<Name>Install()` and `<Name>Frame()`.
 
