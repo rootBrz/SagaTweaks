@@ -223,3 +223,19 @@ Found by reading `sub_68EE40` in full and re-reading the old `ProbeHero` traces 
   The last 0.15 s of the rise stay 3-6 % low (0.94-0.97); the cause is not found.
 * The load `0x679675` (`sub_679310`, movement `-= normal * 0.01` on a hit with a moving object) and `0x68CA90` (editor)
   were also scaled. `0x67A23C` and `0x6790F2` are fixed world-unit offsets / thresholds, not rates.
+
+## 12. Open items
+
+* **Log climb, remaining shortfall.** With the fixes of sections 10 and 11 the speed that enters the sweep matches
+  60 fps within 1 % for the first 0.35 s of the jump (ratio 0.99-1.01) but falls to 0.97, 0.96, 0.94 and 0.94 of the 60 fps
+  value in the windows starting at 0.35, 0.40, 0.45 and 0.50 s (10 jumps, `c = 0.19`), while the jump apex still matches
+  (3.488-3.499 against 3.49 for 60 fps) and 10 of 10 and 11 of 12 jumps climbed in the tuning rounds. Not found. Untested guesses:
+  the easing fraction `c` is a constant but the air and wall cases may ease at different rates; the contact normal turns
+  from (-1, 0) to (-0.5, 0.86) over the rise, and the blend removes the normal part of the velocity per step while the 60 fps
+  game does it in one projection. Tried and dropped: running the logic at exactly 60 Hz for 1.2 s after each
+  jump (`ExactJumps`, 11 of 11 climbs, steps verified at 1/60 s); the world, camera and enemies step at 60 Hz during
+  the window, which was judged not worth it.
+* Fixed since: the FPS limit below the refresh rate (`LimiterRefresh` and `PaceFrame` in `src/framerate.c`: the game's
+  limiter takes `max(refresh, limit)` and sleeps whole milliseconds, so 90 gave 97 fps; now exact for every value of the
+  Tweaks list) and the audio left over after a cutscene skip (the skip now calls the game's stream stop `sub_693FD0` on
+  the audio object `0x924DF8`, which the game otherwise only does on level changes).

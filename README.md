@@ -65,6 +65,12 @@ make        # build/SagaTweaks.asi
 make dist   # build/SagaTweaks.zip
 ```
 
+## Known issues
+
+* **Climbing the fallen log in Speeder Showdown at very high frame rates** is not bit-identical to 60 fps. In
+  the last 0.15 s of the jump the speed into the log is 3-6 % lower than at 60 fps; the jump still succeeds in
+  all test runs (see `docs/AUDIT.md`, section 11).
+
 ## Compatibility
 
 Patches are bound to fixed addresses of the Steam executable and wait until SteamStub has

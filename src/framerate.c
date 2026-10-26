@@ -754,6 +754,31 @@ static int __cdecl StepUpProbe(int a1, float *a2)
     return r;
 }
 
+/*
+ * Frame limiter sub_4FD050 aims at max(refresh, limit) (the 85.0 constants, redirected to the MaxFPS value), so a
+ * limit below the refresh rate was ignored. Its four calls of the refresh getter return min(refresh, limit) instead:
+ * a limit under the refresh rate then wins, the other cases come out as before.
+ */
+static const uintptr_t k_limiter_calls[] = ADDR_LIMITER_CALLS;
+#define LIMITER_CALLS ((int)(sizeof k_limiter_calls / sizeof k_limiter_calls[0]))
+
+static unsigned __cdecl LimiterRefresh(void)
+{
+    unsigned hz = ((unsigned (__cdecl *)(void))ADDR_REFRESH_FN)();
+
+    return g_max_fps > 0 && hz > (unsigned)g_max_fps ? (unsigned)g_max_fps : hz;
+}
+
+static int LimiterCallsOk(void)
+{
+    int i;
+
+    for (i = 0; i < LIMITER_CALLS; i++)
+        if (!CallSiteOk(k_limiter_calls[i], ADDR_REFRESH_FN))
+            return 0;
+    return 1;
+}
+
 static float g_script_acc;
 __attribute__((used)) static int g_steps = 1;
 
@@ -873,7 +898,7 @@ int FramerateReady(void)
            Matches(ADDR_CLOSE_DIST_2, k_close_2_orig, sizeof k_close_2_orig) &&
            PushSitesMatch() && VelRebuildSiteOk() && ScriptTickSiteOk() &&
            CallSiteOk(ADDR_STEPUP_CALL, ADDR_STEPUP_FN) &&
-           CallSiteOk(ADDR_CHAIN_CALL, ADDR_CHAIN_FN) && CallSiteOk(ADDR_STRAND_CALL, ADDR_STRAND_FN) &&
+           LimiterCallsOk() && CallSiteOk(ADDR_CHAIN_CALL, ADDR_CHAIN_FN) && CallSiteOk(ADDR_STRAND_CALL, ADDR_STRAND_FN) &&
            CallSiteOk(ADDR_SWAY_CALL, ADDR_SWAY_FN) && CallSiteOk(ADDR_WOBBLE_CALL, ADDR_WOBBLE_FN) &&
            DampSitesMatch() && Matches(ADDR_DAMP_BLEND, k_blend_orig, sizeof k_blend_orig) &&
            CallSiteOk(ADDR_HEADING_TRUNC, ADDR_TRUNC_FN) && TruncSitesMatch() && RateSitesMatch() && Matches(ADDR_ANGLE_APPROACH, k_approach_orig, sizeof k_approach_orig) &&
@@ -890,6 +915,13 @@ void FramerateInstall(void)
     else
         Log("frame cap patch FAILED");
 
+    {
+        int i, ok = 1;
+
+        for (i = 0; i < LIMITER_CALLS; i++)
+            ok &= PatchCall(k_limiter_calls[i], LimiterRefresh);
+        Log(ok ? "frame limiter honours limits below the refresh rate" : "frame limiter patch FAILED");
+    }
     Log(PatchJmp(ADDR_REFRESH_LOAD, RefreshStub, 9) ? "refresh rate patched" : "refresh rate patch FAILED");
 
     Log(PatchJmp(ADDR_CLOCK_UPDATE, ClockUpdate, 6) ? "frame counters patched" : "frame counters patch FAILED");
@@ -1078,8 +1110,42 @@ static void LiveIniPoll(void)
     ApplyMaxFps();
 }
 
+/*
+ * The game's limiter sleeps whole milliseconds (truncated), so it overshoots: a limit of 90 gave 97 fps. This waits for
+ * the rest of the frame period once per frame: Sleep(1) while more than 2 ms are left, then a spin on the performance
+ * counter. It only ever adds time, so a limit above what the game itself allows changes nothing.
+ */
+static void PaceFrame(void)
+{
+    static LARGE_INTEGER freq, next;
+    LARGE_INTEGER now;
+    LONGLONG period;
+
+    if (g_max_fps <= 0) {
+        next.QuadPart = 0;
+        return;
+    }
+    if (!freq.QuadPart)
+        QueryPerformanceFrequency(&freq);
+    period = freq.QuadPart / g_max_fps;
+    QueryPerformanceCounter(&now);
+    if (!next.QuadPart || now.QuadPart - next.QuadPart > period * 4) {   /* first frame, or after a pause or level load */
+        next.QuadPart = now.QuadPart + period;
+        return;
+    }
+    while (now.QuadPart < next.QuadPart) {
+        if (next.QuadPart - now.QuadPart > freq.QuadPart / 500)
+            Sleep(1);
+        QueryPerformanceCounter(&now);
+    }
+    next.QuadPart += period;
+    if (next.QuadPart < now.QuadPart)       /* late: do not try to catch up */
+        next.QuadPart = now.QuadPart + period;
+}
+
 void FramerateFrame(void)
 {
+    PaceFrame();
     if (g_live_ini)
         LiveIniPoll();
     if (g_log_fps)

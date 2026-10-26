@@ -11,6 +11,8 @@ Each release needs a `## <version>` section here matching `VERSION`. The release
 - Fixed: hero physics that decayed per frame instead of per second at high frame rates (velocity on the step-up over the fallen tree in Speeder Showdown, platform and speed-boost terms, slow turning).
 - Fixed (untested on the device): the ledge probe of the step-up (`sub_68EE40`) used tolerances scaled for `move x dt` vectors on a fixed 0.2 long vector, so at 850 fps it stopped 0.014 above the ledge instead of 0.001. That is the size of the gap by which the jump over the fallen tree in Speeder Showdown stopped short. Part of `FixGameplayRates`.
 - Fixed (tested on the Deck: 10 of 10 jumps over the fallen tree at 850 fps, speed into the wall within 1 % of 60 fps early in the jump): the contact velocity blend (`FixContactVelocity`) is corrected for the walk easing, two more push-out loads (`sub_679310`, an editor handler) are scaled with the step.
+- Fixed: **FPS Limit** values below the display's refresh rate did nothing, and the others overshot (90 gave 97 fps). Every value of the Tweaks list now holds exactly.
+- Fixed: the audio of a skipped cutscene kept playing over the level.
 - New: **VSync** and **Window Mode** (fullscreen / windowed / borderless windowed) rows in Video Settings; `VSync` and `WindowMode` in the ini. Changes apply at once.
 
 ## 1.0.2

@@ -119,6 +119,16 @@ static int g_skip_active; /* a skip is running: FrameHook steps the game until t
 
 static DWORD g_skip_arm_until;
 
+/*
+ * The cutscene's music and dialogue are streams of the audio object at 0x924DF8 (two slots). The game stops them with
+ * sub_693FD0 (thiscall, one argument) when a level changes; skipping inside a level never did, so the cutscene's sound
+ * went on over the gameplay.
+ */
+#define ADDR_AUDIO_OBJECT    0x00924DF8u
+#define ADDR_STOP_STREAMS    0x00693FD0u
+
+typedef int (__attribute__((thiscall)) *StopStreamsFn)(void *, int);
+
 static void CutsceneSkip(int cur, int titles)
 {
     static int prev_start;
@@ -207,6 +217,7 @@ static void RunCutsceneSkip(int game, int *out)
             g_skip_active = 0;
             g_skip_done_tick = GetTickCount();
             g_skip_arm_until = g_skip_done_tick + SKIP_FOLLOW_MS;
+            ((StopStreamsFn)ADDR_STOP_STREAMS)((void *)ADDR_AUDIO_OBJECT, 0);
             {
                 char buf[64];
 
