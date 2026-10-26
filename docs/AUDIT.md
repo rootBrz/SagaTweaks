@@ -185,3 +185,41 @@ Third pass, hand-written stubs for amounts computed at run time (same switch `Fi
 
 Checked on the Deck: all patches apply (log lines without `FAILED`) and the level runs at about 1,000 fps; the
 physical effect is untested.
+
+## 10. Candidate cause of the log-climb failure: step-up probe tolerance (untested)
+
+Found by reading `sub_68EE40` in full and re-reading the old `ProbeHero` traces (`orig/audit/traces/htrace*.txt`):
+* The traces misled in one way: the "successful" jumps of the 4 s window are second jumps (the hero falls back to
+  y 2.45, is lifted to 2.94 again and jumps once more). In all three traces **every first jump failed**, apex 3.445-3.449,
+  independent of z. The second jump that clears reaches y 3.4627 with vy 0.145 and then 3.49 (flag `f1`). So the margin
+  is a height of about 0.015, not a position along the log.
+* `sub_68EE40` is the step-up / ledge snap. It copies the hero ellipsoid, raises it by `flt_810B30` (0.1), sweeps it
+  down by `-2 * 0.1 = -0.2` (a fixed vector, not `move * dt`) and, if `|hero y - landing y| <= 0.1 * 0.5` and the
+  surface normal y >= 0.707 and the move this frame is not rising faster than half a step, moves the hero to the
+  landing point. It is the only caller of this kind in `sub_68F940`, whose only caller is the hero mover `sub_416D60`.
+* The sweep stops short of the surface by `work+160 * |vector|` (`sub_678F60`: `t = hit - work+160`), and `work+160`
+  is the "very close" fraction that the mod raised to `0.005 / (dt * 60)` (0.07 at 850 fps) so that it stays 1e-4 world
+  units for `move * dt` vectors. On the fixed 0.2 probe that gives a stop 0.014 above the ledge (0.001 at 60 fps), plus
+  push-out `0.004 * ny` that the mod scaled down to 0.0003 (0.004 at 60 fps). The probe therefore reports a ledge about
+  0.01 higher than at 60 fps and the hero must rise that much more to fall inside the 0.05 window. The measured apex
+  shortfall (failures 3.446 vs the 3.4627 that triggers it) is the same size.
+* Fix: `StepUpProbe` wraps the call at `0x68FC07`, sets `work+160` to 0.005 and the push-out table to its 60 fps values
+  for the duration of the probe. Switch: `FixGameplayRates=0` turns it off.
+* To confirm on the Deck: same scenario as section 6 (10+ first jumps at 850 fps, `ProbeHero=1`); expect apex >= 3.50 and
+  the hero standing on the log. If it still fails, set `ProbeSweep=1` and compare probe landing y with 60 fps.
+* Other fixed-length sweeps would have the same problem; there are none besides this probe (`sub_68F940` has one caller).
+
+## 11. Result of section 10 and the follow-up (tested)
+
+* `StepUpProbe` (section 10) fixed most of it: 9 of 10 jumps climb at 850 fps instead of about 1 in 3.
+* Remaining difference found with `ProbeSweep=1` captures of one jump at 60 Hz and one uncapped (`S` lines: step, hit
+  normal, resolved move). Positions and normals agree, but the velocity that enters the sweep (`v` of the S line) was 14 %
+  lower uncapped: 0.172 vs 0.200 standing against the log. The walk speed eases to its target by 1/6 of the gap per
+  1/60 s (a fraction that scales with dt); against a wall the speed that enters the sweep settles at
+  `f*v / (s + f*(1-s))` with blend `s` (`VelRebuild`), `f*v` when `s = 1` (60 fps). `VelRebuild` now uses
+  `s * (1-c) / (1-c*s)` with `c = 0.19` (1/6 predicts the value, 0.19 fits the measured jumps).
+* Tuning with `c` live from the ini (10 jumps per value, ratio of the pre-contact `vx` to the 60 Hz reference per 0.05 s
+  of the jump): `c = 0.167`: 0.95 early; `0.22`: 1.02-1.05 early, 11 of 12 climbs; `0.19`: 0.99-1.01 early, 10 of 10.
+  The last 0.15 s of the rise stay 3-6 % low (0.94-0.97); the cause is not found.
+* The load `0x679675` (`sub_679310`, movement `-= normal * 0.01` on a hit with a moving object) and `0x68CA90` (editor)
+  were also scaled. `0x67A23C` and `0x6790F2` are fixed world-unit offsets / thresholds, not rates.

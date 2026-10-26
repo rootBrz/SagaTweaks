@@ -74,6 +74,9 @@
  * world units is 0.005 x step: 1e-4 at 60 fps, 7e-6 at 850 fps, below the float resolution at the hero's
  * coordinates. The two loads read the mod's values; the fraction is scaled up for short steps.
  */
+#define ADDR_STEPUP_CALL   0x0068FC07u  /* call sub_68EE40 in sub_68F940 */
+#define ADDR_STEPUP_FN     0x0068EE40u
+#define ADDR_WORK_BLOCK    0x0292186Cu  /* dword_292186C: collision work block, +160 = sweep tolerance fraction */
 #define ADDR_SWEEP         0x0068F940u  /* sub_68F940(pos, move, flags, idx, a5, radius y, radius, 0, 0, mask): swept sphere */
 #define ADDR_SWEEP_RESUME  0x0068F949u
 #define ADDR_CLOSE_DIST_1  0x0068FAFEu  /* fld ds:flt_7597A4 */

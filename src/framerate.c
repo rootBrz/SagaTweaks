@@ -230,6 +230,8 @@ static const struct { uintptr_t addr, cst; int group; } k_push_sites[] = {
     { 0x678967, 0x76E1A8, 1 }, { 0x678998, 0x76E1A0, 2 }, { 0x6787C2, 0x76E1B8, 3 }, { 0x678BE8, 0x76E198, 4 },
     { 0x678CA0, 0x76E198, 4 }, { 0x679037, 0x76E1C8, 5 }, { 0x678CC1, 0x7531A8, 6 },
     { 0x68FE03, 0x753180, 7 },   /* sub_68F940: contact normal * 0.001 on every sweep loop pass */
+    { 0x679675, 0x7531A8, 6 },   /* sub_679310 (hit on a moving object): movement -= normal * 0.01 */
+    { 0x68CA90, 0x7531A8, 6 },   /* editor input handler: value += 0.01 per call while a button is held */
 };
 
 #define PUSH_SITES ((int)(sizeof k_push_sites / sizeof k_push_sites[0]))
@@ -694,6 +696,8 @@ static void __cdecl SweepProbe(float *pos, float *mv, uint8_t *flags, short idx,
     }
 }
 
+#define SMOOTH60 0.19f   /* fitted: the walk easing is 1/6 per 1/60 s, 0.19 matches 60 fps best (ratio 0.99-1.01 over a jump) */
+
 int g_fix_contact = 1;
 
 /* The call at ADDR_VEL_REBUILD: dst = src * inv_dt. At short steps part of the old velocity survives a contact. */
@@ -706,6 +710,12 @@ static float *__cdecl VelRebuild(float *dst, float *src, float inv_dt)
     for (i = 0; i < 3; i++)
         dst[i] = src[i] * inv_dt;
     s = inv_dt > 0.0f ? COUNTER_HZ / inv_dt : 1.0f;
+    /*
+     * The walk/air speed eases to its target by SMOOTH60 of the gap per 1/60 s (0.2 of 1.2), a fraction that scales
+     * with the step. Against a wall the speed that enters the sweep settles at f*v/(s + f*(1 - s)) with the blend s;
+     * the 60 fps value (s = 1) is f60*v. s is lowered so that both agree (measured: 0.172 instead of 0.200 with s = 60 dt; 0.19 instead of 1/6 fits the measured jumps).
+     */
+    s = s * (1.0f - SMOOTH60) / (1.0f - SMOOTH60 * s);
     if (g_fix_contact && s < 1.0f) {
         for (i = 0; i < 3; i++)
             dst[i] = s * dst[i] + (1.0f - s) * pre[i];
@@ -718,6 +728,30 @@ static int VelRebuildSiteOk(void)
     const uint8_t *b = (const uint8_t *)ADDR_VEL_REBUILD;
 
     return b[0] == 0xE8 && (uint32_t)(ADDR_VEL_REBUILD + 5 + *(const int32_t *)(b + 1)) == ADDR_VEL_REBUILD_FN;
+}
+
+/*
+ * Step-up probe. sub_68EE40 drops a copy of the hero's ellipsoid by a fixed 2 * step height (0.2) to find the
+ * ledge under it; the hero is snapped onto it if it is within half a step (0.05) of the hero. The sweep stops
+ * short of the surface by "veryClose fraction * vector length" plus the push-out offsets. Both are scaled for
+ * vectors of move * dt, but this vector is a fixed length: at 850 fps the probe stopped 0.014 above the ledge
+ * instead of 0.001, so the hero had to rise 0.013 higher before the step-up fired (the apex of the jump on the
+ * fallen tree of Episode VI is 0.014 short of it). The probe runs with the 60 fps tolerances.
+ */
+static int __cdecl StepUpProbe(int a1, float *a2)
+{
+    float *tol = (float *)(*(int *)ADDR_WORK_BLOCK + 160);
+    float tol_saved = *tol;
+    double push_saved[PUSH_GROUPS];
+    int r;
+
+    memcpy(push_saved, g_push, sizeof push_saved);
+    memcpy(g_push, k_push_base, sizeof g_push);
+    *tol = 0.005f;
+    r = ((int (__cdecl *)(int, float *))ADDR_STEPUP_FN)(a1, a2);
+    *tol = tol_saved;
+    memcpy(g_push, push_saved, sizeof g_push);
+    return r;
 }
 
 static float g_script_acc;
@@ -838,6 +872,7 @@ int FramerateReady(void)
            Matches(ADDR_CLOSE_DIST_1, k_close_1_orig, sizeof k_close_1_orig) &&
            Matches(ADDR_CLOSE_DIST_2, k_close_2_orig, sizeof k_close_2_orig) &&
            PushSitesMatch() && VelRebuildSiteOk() && ScriptTickSiteOk() &&
+           CallSiteOk(ADDR_STEPUP_CALL, ADDR_STEPUP_FN) &&
            CallSiteOk(ADDR_CHAIN_CALL, ADDR_CHAIN_FN) && CallSiteOk(ADDR_STRAND_CALL, ADDR_STRAND_FN) &&
            CallSiteOk(ADDR_SWAY_CALL, ADDR_SWAY_FN) && CallSiteOk(ADDR_WOBBLE_CALL, ADDR_WOBBLE_FN) &&
            DampSitesMatch() && Matches(ADDR_DAMP_BLEND, k_blend_orig, sizeof k_blend_orig) &&
@@ -888,6 +923,8 @@ void FramerateInstall(void)
         ok &= PatchCallPad(ADDR_DAMP_BLEND, BlendDecayStub, sizeof k_blend_orig);
         Log(ok ? "per-call hero damping scaled with the step" : "hero damping patch FAILED");
     }
+    if (g_fix_gameplay)
+        Log(PatchCall(ADDR_STEPUP_CALL, StepUpProbe) ? "step-up probe uses the 60 fps tolerances" : "step-up probe patch FAILED");
     Log(PatchWallStep() ? "wall-push timer scaled with the step" : "wall-push timer patch FAILED");
     if (g_fix_gameplay) {
         int i, ok = 1;
