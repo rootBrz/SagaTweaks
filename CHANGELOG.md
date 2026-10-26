@@ -5,6 +5,7 @@ Each release needs a `## <version>` section here matching `VERSION`. The release
 ## 1.1.3
 
 - New: skipping a cutscene fades to black (a quarter of a second, the cutscene keeps playing) and fades gameplay in from black, instead of cutting.
+- Fixed: the player 2 join prompt ("Press F2 or START to start") wrapped to two lines and overlapped the stud counter. It now reads "F2 or START" on one line.
 - Fixed: a dropped gamepad could be released immediately instead of after one second, and the window mode and button-prompt timers could fire at once. The elapsed-time checks added in 1.1.0 were wrong about every other millisecond.
 
 ## 1.1.2

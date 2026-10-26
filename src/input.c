@@ -358,8 +358,8 @@ static const char *k_join_orig[JOIN_TEXT_COUNT] = {
 };
 
 static const char *k_join_start[JOIN_TEXT_COUNT] = {
-    "Press F1 or START to start",
-    "Press F2 or START to start",
+    "F1 or START",
+    "F2 or START",
 };
 
 #define JOIN_TEXT_MAX 8
