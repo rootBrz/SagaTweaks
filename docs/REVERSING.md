@@ -406,3 +406,10 @@ last two steps was built and tested on the Deck (Speeder Showdown, 850 fps). The
 the log was climbable with the variable step anyway, so it was removed. Findings worth keeping: every mesh draw is
 preceded by one `SetVertexShaderConstantF(16, 4)` (the matrix), then `40x1`, `28x11` (bones), `111x1` per draw; at 60 fps
 all 10 jumps rose to the full height while at 850 fps they split into 0.50 (fail) and 0.535 (success) rises.
+
+Later bug, "HUD doubled on the pause screen at fractional scales": on pause the game copies the swap chain's backbuffer
+(`StretchRect`, 1920x1080, in the middle of the frame, before the HUD pass) into a snapshot and draws that under the pause
+menu. With the scaled virtual backbuffer the real one still holds the previous frame including its HUD, so the snapshot had
+a stale HUD that the live one was drawn over (identical at 200 %, visibly offset and blurred at 150 %). Found by logging
+`StretchRect` / `Clear` per frame with `TracePasses=1`. Fix: `StretchRect` hook (vtable 34) reads from the virtual backbuffer
+instead. The snapshot surface itself is 1920x1080, so the copy is also made into a texture of the scaled size and `SetTexture` swaps it in (`SnapshotTexture`). The paused background is shifted by 3-5 px against the running game even at 100 % (game behaviour, measured without the mod's render path), not a bug of the scale code.

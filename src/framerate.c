@@ -812,6 +812,32 @@ static int StreakCallsOk(void)
     return 1;
 }
 
+/*
+ * Saber sparks. sub_62C350(rate, dt) rolls how many events a rate per second gives in one frame (0 or 1 at the
+ * saber's 10 and 100 per second), and each event emits particles over a window of one frame (sub_656DC0 passes the
+ * frame time as the window). The window shrinks with the frame time as well, so the number of sparks per second fell
+ * with the square of it: 14x fewer at 850 fps. The rolls use the time of one 60 Hz frame at most, as at 60 fps.
+ */
+static const uintptr_t k_spark_calls[] = ADDR_SPARK_CALLS;
+#define SPARK_CALLS ((int)(sizeof k_spark_calls / sizeof k_spark_calls[0]))
+
+typedef unsigned (__cdecl *SparkRateFn)(float, float);
+
+static unsigned __cdecl SparkRate(float rate, float dt)
+{
+    return ((SparkRateFn)ADDR_SPARK_RATE_FN)(rate, dt < 1.0f / 60.0f ? 1.0f / 60.0f : dt);
+}
+
+static int SparkCallsOk(void)
+{
+    int i;
+
+    for (i = 0; i < SPARK_CALLS; i++)
+        if (!CallSiteOk(k_spark_calls[i], ADDR_SPARK_RATE_FN))
+            return 0;
+    return 1;
+}
+
 static float g_script_acc;
 __attribute__((used)) static int g_steps = 1;
 
@@ -931,7 +957,7 @@ int FramerateReady(void)
            Matches(ADDR_CLOSE_DIST_2, k_close_2_orig, sizeof k_close_2_orig) &&
            PushSitesMatch() && VelRebuildSiteOk() && ScriptTickSiteOk() &&
            CallSiteOk(ADDR_STEPUP_CALL, ADDR_STEPUP_FN) &&
-           LimiterCallsOk() && StreakCallsOk() && CallSiteOk(ADDR_CHAIN_CALL, ADDR_CHAIN_FN) && CallSiteOk(ADDR_STRAND_CALL, ADDR_STRAND_FN) &&
+           LimiterCallsOk() && StreakCallsOk() && SparkCallsOk() && CallSiteOk(ADDR_CHAIN_CALL, ADDR_CHAIN_FN) && CallSiteOk(ADDR_STRAND_CALL, ADDR_STRAND_FN) &&
            CallSiteOk(ADDR_SWAY_CALL, ADDR_SWAY_FN) && CallSiteOk(ADDR_WOBBLE_CALL, ADDR_WOBBLE_FN) &&
            DampSitesMatch() && Matches(ADDR_DAMP_BLEND, k_blend_orig, sizeof k_blend_orig) &&
            CallSiteOk(ADDR_HEADING_TRUNC, ADDR_TRUNC_FN) && TruncSitesMatch() && RateSitesMatch() && Matches(ADDR_ANGLE_APPROACH, k_approach_orig, sizeof k_approach_orig) &&
@@ -961,6 +987,11 @@ void FramerateInstall(void)
         for (i = 0; i < STREAK_CALLS; i++)
             ok &= PatchCall(k_streak_calls[i], StreakAdd);
         Log(ok ? "trail segments added at 60 Hz" : "trail patch FAILED");
+
+        ok = 1;
+        for (i = 0; i < SPARK_CALLS; i++)
+            ok &= PatchCall(k_spark_calls[i], SparkRate);
+        Log(ok ? "saber sparks rolled at 60 Hz" : "saber spark patch FAILED");
     }
     Log(PatchJmp(ADDR_REFRESH_LOAD, RefreshStub, 9) ? "refresh rate patched" : "refresh rate patch FAILED");
 

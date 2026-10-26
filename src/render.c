@@ -273,6 +273,10 @@ static IDirect3DSurface9 *g_virtual_bb;
 static void *g_real_bb; /* identity of the swap chain's backbuffer, not a reference */
 static UINT g_vbb_w, g_vbb_h;
 
+static IDirect3DTexture9 *g_snap_tex;           /* scaled copy of the scene made at the pause */
+static IDirect3DBaseTexture9 *g_snap_orig;      /* identity of the game's snapshot texture, not a reference */
+static UINT g_snap_w, g_snap_h;
+
 static int g_vbb_used;
 
 static IDirect3DSurface9 *VirtualBackbuffer(IDirect3DDevice9 *dev, IDirect3DSurface9 *surface)
@@ -410,6 +414,11 @@ static HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9 *dev, const RECT *
 
 static HRESULT STDMETHODCALLTYPE HookReset(IDirect3DDevice9 *dev, D3DPRESENT_PARAMETERS *pp)
 {
+    if (g_snap_tex) {
+        IDirect3DTexture9_Release(g_snap_tex);
+        g_snap_tex = NULL;
+    }
+    g_snap_orig = NULL;
     if (g_virtual_bb) {
         IDirect3DSurface9_Release(g_virtual_bb);
         g_virtual_bb = NULL;
@@ -531,6 +540,72 @@ static HRESULT STDMETHODCALLTYPE HookGetRenderTarget(IDirect3DDevice9 *dev, DWOR
         IDirect3DSurface9_AddRef(*out);
     }
     return hr;
+}
+
+/*
+ * On pause the game copies "the backbuffer" (the scene so far, before the HUD pass) into a snapshot that it draws
+ * under the pause menu, taking the surface from the swap chain. With the scaled backbuffer in use that surface is
+ * the real one, which still holds the previous frame including its HUD: the paused screen then showed a stale,
+ * blurred copy of the HUD under the live one (a visible double image at fractional scales). Copy from the scaled
+ * backbuffer instead.
+ */
+#define VT_STRETCH_RECT 34
+
+typedef HRESULT (STDMETHODCALLTYPE *StretchRectFn)(IDirect3DDevice9 *, IDirect3DSurface9 *, const RECT *, IDirect3DSurface9 *, const RECT *, D3DTEXTUREFILTERTYPE);
+
+static StretchRectFn g_orig_stretch_rect;
+
+/*
+ * The snapshot surface is 1920x1080, so the paused background was the scene shrunk to the backbuffer size and drawn back
+ * up: softer than the live picture. The copy is also made into a texture of the scaled size, and the game's draw of the
+ * snapshot texture (HookSetTexture -> SnapshotTexture) samples that one instead.
+ */
+
+static const GUID k_iid_texture9 = { 0x85C31227, 0x3DE5, 0x4F00, { 0x9B, 0x3A, 0xF1, 0x1A, 0xC3, 0x8C, 0x18, 0xB5 } };
+
+static void SnapshotCopy(IDirect3DDevice9 *dev, IDirect3DSurface9 *dst)
+{
+    IDirect3DTexture9 *game_tex = NULL;
+    IDirect3DSurface9 *level = NULL;
+    D3DSURFACE_DESC desc;
+    UINT w = (UINT)ScaledWidth(), h = (UINT)ScaledHeight();
+
+    g_snap_orig = NULL;
+    if (FAILED(IDirect3DSurface9_GetContainer(dst, &k_iid_texture9, (void **)&game_tex)) || !game_tex)
+        return;
+    IDirect3DTexture9_Release(game_tex);
+    if (FAILED(IDirect3DSurface9_GetDesc(g_virtual_bb, &desc)))
+        return;
+    if (g_snap_tex && (g_snap_w != w || g_snap_h != h)) {
+        IDirect3DTexture9_Release(g_snap_tex);
+        g_snap_tex = NULL;
+    }
+    if (!g_snap_tex) {
+        if (FAILED(IDirect3DDevice9_CreateTexture(dev, w, h, 1, D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT, &g_snap_tex, NULL)))
+            return;
+        g_snap_w = w;
+        g_snap_h = h;
+    }
+    if (SUCCEEDED(IDirect3DTexture9_GetSurfaceLevel(g_snap_tex, 0, &level))) {
+        if (SUCCEEDED(g_orig_stretch_rect(dev, g_virtual_bb, NULL, level, NULL, D3DTEXF_NONE)))
+            g_snap_orig = (IDirect3DBaseTexture9 *)game_tex;
+        IDirect3DSurface9_Release(level);
+    }
+}
+
+IDirect3DBaseTexture9 *SnapshotTexture(IDirect3DBaseTexture9 *tex)
+{
+    return g_snap_orig && tex == g_snap_orig && g_snap_tex ? (IDirect3DBaseTexture9 *)g_snap_tex : tex;
+}
+
+static HRESULT STDMETHODCALLTYPE HookStretchRect(IDirect3DDevice9 *dev, IDirect3DSurface9 *src, const RECT *src_rect, IDirect3DSurface9 *dst, const RECT *dst_rect, D3DTEXTUREFILTERTYPE filter)
+{
+    if (g_vbb_used && g_virtual_bb && src && (void *)src == g_real_bb) {
+        src = g_virtual_bb;
+        if (dst && !src_rect && !dst_rect)
+            SnapshotCopy(dev, dst);
+    }
+    return g_orig_stretch_rect(dev, src, src_rect, dst, dst_rect, filter);
 }
 
 static HRESULT STDMETHODCALLTYPE HookSetViewport(IDirect3DDevice9 *dev, const D3DVIEWPORT9 *vp)
@@ -757,6 +832,7 @@ static void InstallRenderScaleHooks(void)
         PatchVtableEntry(vtable, VT_DRAW_PRIMITIVE_UP, (void *)HookDrawPrimUP, (void **)&g_orig_draw_prim_up);
         PatchVtableEntry(vtable, VT_DRAW_INDEXED_UP, (void *)HookDrawIdxUP, (void **)&g_orig_draw_idx_up);
     }
+    PatchVtableEntry(vtable, VT_STRETCH_RECT, (void *)HookStretchRect, (void **)&g_orig_stretch_rect);
     PatchVtableEntry(vtable, VT_PRESENT, (void *)HookPresent, (void **)&g_orig_present);
     PatchVtableEntry(vtable, VT_RESET, (void *)HookReset, (void **)&g_orig_reset);
     PatchVtableEntry(vtable, VT_SET_VS_CONST_F, (void *)HookSetVSConst, (void **)&g_orig_set_vs_const);

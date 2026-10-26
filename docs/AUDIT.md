@@ -250,3 +250,12 @@ controller: free segments fell to 0 within one swing and stayed at 0 with no act
 bottom out at 7-16 and return to 128. Fix: `StreakAdd` wraps the three calls and only marks the trail in use (`+16`,
 `+24`) on frames without a 60 Hz tick (`g_steps`). Not explained: how the segments become unreachable once the pool is
 empty (free list empty, no active trail); at true 60 Hz logic the pool also reached 0 once with six trails and recovered.
+
+## 14. Saber sparks (fixed in 1.1.4)
+
+Symptom: at an unlocked frame rate the sparks of clashing sabers were much rarer. Hits call `sub_62C350(rate, dt)` (a random
+count of events for a rate per second, 0 or 1 at 10 and 100 per second; `0x4A0455` in `sub_49FA50`, `0x4B231D` and `0x4B24E0`
+in `sub_4B1AB0`) and pass the count to `sub_684C90` -> `sub_656DC0` -> `sub_6561D0`, which emits particles over a window of
+`flt_8108E4` (the frame time) seconds. The rate already scales with dt and so does the window, so the sparks per second fall
+with dt squared. The three calls go through `SparkRate`, which rolls with at least 1/60 s. Not checked in game (needs a saber
+fight); the other `sub_62C350` callers (about 25) have the same shape and were left alone.

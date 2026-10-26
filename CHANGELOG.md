@@ -2,6 +2,11 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.1.4
+
+- Fixed: the lightsaber sparks were 14 times rarer at 850 fps than at 60 fps (and 2 times at 120 fps). The random roll that starts a spark burst used the frame time, and the burst itself also lasts one frame. The roll now uses 1/60 s at most, like at 60 fps. `FixGameplayRates=0` turns it off.
+- Fixed: with a render scale above 100 % the HUD showed twice (a blurred second copy) on the pause screen. The game copies the backbuffer for the pause background; it got the previous frame, HUD included, instead of the scaled scene. The pause background is now a copy at the scaled resolution, so it stays as sharp as the live picture.
+
 ## 1.1.3
 
 - New: skipping a cutscene fades to black (a quarter of a second, the cutscene keeps playing) and fades gameplay in from black, instead of cutting.

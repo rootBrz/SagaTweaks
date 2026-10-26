@@ -13,4 +13,5 @@ extern int g_trace_passes;
 int RenderReady(void);
 void RenderInstall(void);
 void RenderFrame(int cur, int titles);
+IDirect3DBaseTexture9 *SnapshotTexture(IDirect3DBaseTexture9 *tex);
 extern int g_probe_consts;
