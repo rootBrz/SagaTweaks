@@ -11,8 +11,7 @@
  * also counts them for the cursor range; a call is patched in right before the Back row to draw
  * three more. The rows sit at index 4-6 and push Back to index 7, so the update wrapper handles
  * the new row itself and shows the original update routine Back as row 4 again. Changing the
- * value rebuilds the render targets (sub_6E2D20, the routine a device reset uses) and stores
- * the choice in the ini.
+ * value resets the device with a new backbuffer size (RenderScaleSet) and stores the choice in the ini.
  */
 #define ADDR_VID_MENU_UPDATE  0x00800D70u  /* menu table entry 0x401, update callback */
 
@@ -58,7 +57,7 @@ static int ScaleStepIndex(void)
     double d, bestd = 1e9;
 
     for (i = 0; i < SCALE_STEPS; i++) {
-        d = k_scale_steps[i] > g_render_scale ? k_scale_steps[i] - g_render_scale : g_render_scale - k_scale_steps[i];
+        d = fabs(k_scale_steps[i] - RenderScaleValue());
         if (d < bestd) {
             bestd = d;
             best = i;
@@ -71,7 +70,7 @@ void __cdecl VideoRowDraw(int menu)
 {
     char text[48];
 
-    snprintf(text, sizeof text, "Render Scale: %d%%", (int)(g_render_scale * 100.0 + 0.5));
+    snprintf(text, sizeof text, "Render Scale: %d%%", (int)(RenderScaleValue() * 100.0 + 0.5));
     ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, text, *(int *)ADDR_MENU_ALPHA);
     snprintf(text, sizeof text, "Window Mode: %s", g_window_mode_names[g_window_mode]);
     ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, text, *(int *)ADDR_MENU_ALPHA);
@@ -98,10 +97,9 @@ static void StepRenderScale(int step)
     int idx = (ScaleStepIndex() + step + SCALE_STEPS) % SCALE_STEPS;
     char buf[16];
 
-    g_render_scale = k_scale_steps[idx];
-    snprintf(buf, sizeof buf, "%.2f", g_render_scale);
+    snprintf(buf, sizeof buf, "%.2f", k_scale_steps[idx]);
     WritePrivateProfileStringA("SagaTweaks", "RenderScale", buf, g_ini_path);
-    ((BuildTargetsFn)ADDR_BUILD_TARGETS)((void *)ADDR_DEVICE_OBJECT);
+    RenderScaleSet(k_scale_steps[idx]);
     *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
     Log("render scale changed from the menu");
 }
@@ -112,7 +110,7 @@ static void StepDisplay(int row, int step)
     char buf[16];
 
     if (row == WINDOW_ROW) {
-        g_window_mode = (g_window_mode + step + WINDOW_MODES) % WINDOW_MODES;
+        g_window_mode = WindowModeStep(g_window_mode, step);
         snprintf(buf, sizeof buf, "%d", g_window_mode);
         WritePrivateProfileStringA("SagaTweaks", "WindowMode", buf, g_ini_path);
     } else {
@@ -243,7 +241,7 @@ static void TweakValueText(const TweakOpt *o, char *out, size_t size)
             snprintf(out, size, "%d%s", *o->var, o->unit);
         break;
     default:
-        snprintf(out, size, "%d%%", (int)(g_render_scale * 100.0 + 0.5));
+        snprintf(out, size, "%d%%", (int)(RenderScaleValue() * 100.0 + 0.5));
         break;
     }
 }
@@ -253,7 +251,7 @@ static void TweakStore(const TweakOpt *o)
     char buf[16];
 
     if (o->type == OPT_SCALE)
-        snprintf(buf, sizeof buf, "%.2f", g_render_scale);
+        snprintf(buf, sizeof buf, "%.2f", RenderScaleValue());
     else
         snprintf(buf, sizeof buf, "%d", *o->var);
     WritePrivateProfileStringA("SagaTweaks", o->key, buf, g_ini_path);

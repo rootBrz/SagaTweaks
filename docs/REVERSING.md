@@ -125,8 +125,8 @@ lazily from the frame hook once the table is complete.
   globals or a structure (menu stack, playing animations, device table) from the live process.
   First tool I reach for to answer "what is this variable *right now*".
 * **In-mod tracing**: because the mod is inside the process it can log what the game does.
-  `TraceRT` logs D3D9 calls, `TracePasses` + `SkipPass` bisect the render passes (skip pass N and
-  see what disappears), `DumpTextures` writes render targets to TGA. Per-frame state lines during
+  Earlier builds had `TraceRT` / `TracePasses` / `SkipPass` (log D3D9 calls, bisect the render passes by skipping
+  pass N); `DumpTextures` writes textures to TGA. Per-frame state lines during
   a skip (`wipe 0.897 dir -1.333 pend 0/0 be0 0`) were what finally showed the whole transition.
 * **Experiments with a falsifiable prediction**: write the prediction down, change one thing,
   look. Example: "if the gap is frame-count driven, stepping the game 8x per frame will shorten
@@ -276,27 +276,25 @@ Mistake worth remembering: I first assumed the globals were `X, Y, nWidth, nHeig
 settings; check the order in the data, not the decompiler's variable names.
 
 ### Render scale
-The game creates its effect render targets from the backbuffer size in three functions; the size
-loads (`0x605813/20`, `0x605894/A3`, `0x605989/95`) are replaced by stubs that multiply. Problems
-solved in order: (a) bigger RTs but the original depth buffer -> everything dynamic vanished, fixed
-by a depth surface "twin" of the scaled size swapped in at `SetDepthStencilSurface`; (b) shader
-constant `c45 = (w, h, 1/w, 1/h)` must match the bound target, so it is rewritten whenever a scaled
-RT is bound (hooks on constant set/get); (c) the **HUD/particle pass draws straight into the real
-backbuffer with an empty depth buffer**, so blue particles showed through walls at 200 %; fixed by
-substituting a scaled *virtual backbuffer* (same size, shares the scaled depth) and `StretchRect`ing
-it to the real one in `Present`. Found by comparing screenshots at 100 % / 200 % and bisecting the
-passes with `SkipPass`.
+The scale is a **backbuffer size**: `sub_6E3940` (device create / reset) copies the video mode's width and height into the
+present parameters (`+138h`, `+13Ch`); the copy at `0x6E3AD7` is replaced by a call that multiplies them when the device
+is windowed (clamped to 8192 per side). The game then runs at the larger size by itself, so every render target, depth
+buffer, shader constant and the HUD agree, and Present stretches the backbuffer to the window (any windowed D3D9 does;
+exclusive fullscreen cannot, so the Window Mode row skips Fullscreen while the scale is not 100 %). Changing the scale
+resets the device through the same routine as a window mode change.
 
-Later bug, "characters vanish after changing the scale at run time": the game saves the bound
-surfaces with `GetDepthStencilSurface` / `GetRenderTarget` and restores them later. While the scaled
-depth twin was bound it saved *our twin*; when the scale changed the twin was released and replaced,
-but the game kept restoring the old, smaller one, so the depth test clipped the scene and every
-dynamic object disappeared (statics and shadows were fine, which made it look random). Found with
-per-3-second diagnostics (`engine=` depth surface != `main=`, and `engine` equal to the *retired*
-twin's address) plus a scripted soak test: a debug file (`<ini>.scale`) changes the scale at run
-time while a screenshot metric (brown robe pixels in the centre) flags missing characters. Fix:
-hook the two `Get*` calls and hand the game its own surfaces instead of ours (and forget the
-cached surfaces on `Reset`). After that 24 random scale changes, 3.0x and 4.0x all passed.
+The game treats the backbuffer size as the window size in three places, and these get the unscaled size: the mode lookup
+`sub_6E1B70` (windowed, it writes the size it is given into the mode table, which showed the multiplied resolution in Video
+Settings and multiplied it again on every reset) at `0x6E3FC7`, and the saved resolution (`sub_6DAEF0` / `sub_6DAF00`,
+`0x6E409A` / `0x6E40AB`).
+
+History: the first implementation kept the game at the native size and redirected pieces: the three effect render targets
+(`0x605813` ...), a depth surface twin, the `c45` screen constant, viewport / scissor rescaling and a scaled virtual
+backbuffer for the HUD pass. Every effect that reads "the screen" its own way (pause snapshot, heat distortion, shadows
+on the pause screen) was another place where the sizes could disagree, and it was removed in favour of the backbuffer size.
+Lessons that still apply: the game saves and restores the surfaces it gets from `GetRenderTarget` / `GetDepthStencilSurface`;
+on pause it copies the swap chain's backbuffer into a snapshot (`StretchRect` in the middle of a frame) and draws that under
+the menu; the paused background is shifted by 3-5 px against the running game even at 100 %, which is the game's own behaviour.
 
 ### Menus: Render Scale row, Tweaks page, hidden FSAA row
 The menu system: table at `0x800AA8`; menu stack depth `0x800944`; menu objects at
@@ -406,10 +404,3 @@ last two steps was built and tested on the Deck (Speeder Showdown, 850 fps). The
 the log was climbable with the variable step anyway, so it was removed. Findings worth keeping: every mesh draw is
 preceded by one `SetVertexShaderConstantF(16, 4)` (the matrix), then `40x1`, `28x11` (bones), `111x1` per draw; at 60 fps
 all 10 jumps rose to the full height while at 850 fps they split into 0.50 (fail) and 0.535 (success) rises.
-
-Later bug, "HUD doubled on the pause screen at fractional scales": on pause the game copies the swap chain's backbuffer
-(`StretchRect`, 1920x1080, in the middle of the frame, before the HUD pass) into a snapshot and draws that under the pause
-menu. With the scaled virtual backbuffer the real one still holds the previous frame including its HUD, so the snapshot had
-a stale HUD that the live one was drawn over (identical at 200 %, visibly offset and blurred at 150 %). Found by logging
-`StretchRect` / `Clear` per frame with `TracePasses=1`. Fix: `StretchRect` hook (vtable 34) reads from the virtual backbuffer
-instead. The snapshot surface itself is 1920x1080, so the copy is also made into a texture of the scaled size and `SetTexture` swaps it in (`SnapshotTexture`). The paused background is shifted by 3-5 px against the running game even at 100 % (game behaviour, measured without the mod's render path), not a bug of the scale code.

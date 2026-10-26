@@ -40,23 +40,13 @@ void ConfigLoad(const char *ini)
         g_refresh_override = 0;
 
     GetPrivateProfileStringA("SagaTweaks", "RenderScale", "1.0", buf, sizeof buf, ini);
-    g_render_scale = atof(buf);
-    if (g_render_scale < 0.25)
-        g_render_scale = 1.0;
-    else if (g_render_scale > MAX_RENDER_SCALE)
-        g_render_scale = MAX_RENDER_SCALE;
-    {
-        char list[128], *tok, *save;
-
-        GetPrivateProfileStringA("SagaTweaks", "RenderScales", "", list, sizeof list, ini);
-        for (tok = strtok_s(list, ", ", &save); tok && g_scale_count < MAX_RENDER_SCALES;
-             tok = strtok_s(NULL, ", ", &save)) {
-            double v = atof(tok);
-
-            if (v > 1.0 && v <= 4.0)
-                g_scales[g_scale_count++] = v;
-        }
-    }
+    g_bb_scale = atof(buf);
+    if (g_bb_scale < 0.25)
+        g_bb_scale = 1.0;
+    else if (g_bb_scale > MAX_RENDER_SCALE)
+        g_bb_scale = MAX_RENDER_SCALE;
+    if (g_bb_scale != 1.0 && g_window_mode == WINDOW_FULLSCREEN)   /* a scaled backbuffer needs a windowed device */
+        g_window_mode = WINDOW_BORDERLESS;
 
     /* debugging aids */
     INI_INT(g_log_fps, "LogFPS", 0);
@@ -65,10 +55,6 @@ void ConfigLoad(const char *ini)
     INI_INT(g_fix_gameplay, "FixGameplayRates", 1);
     INI_INT(g_live_ini, "LiveIni", 0);
     INI_INT(g_probe_consts, "ProbeConsts", 0);
-    INI_INT(g_trace_rt, "TraceRT", 0);
     INI_INT(g_dump_textures, "DumpTextures", 0);
-    INI_INT(g_skip_pass, "SkipPass", -1);
-    INI_INT(g_trace_passes, "TracePasses", 0);
-    INI_INT(g_skip_scaled, "SkipScaledPass", -1);
 #undef INI_INT
 }

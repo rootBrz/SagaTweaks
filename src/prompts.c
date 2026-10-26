@@ -185,7 +185,6 @@ HRESULT STDMETHODCALLTYPE HookSetTexture(IDirect3DDevice9 *dev, DWORD stage, IDi
 {
     if (g_atlas_ready && tex && (void *)tex == (void *)g_buttons_tex)
         tex = (IDirect3DBaseTexture9 *)g_combined_tex;
-    tex = SnapshotTexture(tex);
     return g_orig_set_texture(dev, stage, tex);
 }
 

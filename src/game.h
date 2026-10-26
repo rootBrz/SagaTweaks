@@ -136,38 +136,13 @@
  * whose physics block (+36) holds the gravity at +36.
  */
 
-/*
- * Render scale. The video mode list ends at the desktop resolution. Entries for
- * desktop size * scale (RenderScales in the ini, default 1.5 and 2) are appended before
- * the game first looks a mode up (sub_6E1B70, whose first five bytes are hooked), so
- * they show up in the Screen Resolution row and a saved choice is restored on start.
- * The game then renders at the bigger size and gamescope scales it down to the display.
- */
-#define ADDR_MODE_LOOKUP    0x006E1B70u  /* sub_6E1B70(this, w, h, hz): nearest mode lookup (thiscall) */
-#define ADDR_MODE_LOOKUP_2  0x006E1B75u  /* resume address after the displaced 5 bytes */
+/* Video mode table and desktop size of the device object. */
 #define DEVICE_MODE_COUNT_OFS 0x618
 #define DEVICE_MODE_TABLE_OFS 0x61C
 #define DEVICE_DESKTOP_W_OFS  0x608
 #define DEVICE_DESKTOP_H_OFS  0x60C
 #define MAX_RENDER_SCALE    4.0
-#define MAX_RENDER_SCALES   8
-#define MAX_RENDER_DIM      8192
 
-/*
- * Render scale (real). The effect render targets are created by sub_605800 / sub_605890
- * with size = backbuffer size / divisor, reading dword_2976700 (width) and dword_2976704
- * (height). The four loads are replaced by calls that return the size times RenderScale.
- * The scene is then drawn into larger (or smaller) targets and the composite pass maps the
- * whole target onto the real backbuffer, so the HUD stays at native resolution.
- */
-#define ADDR_RT_H_1  0x00605813u  /* mov eax, [dword_2976704] in sub_605800 */
-#define ADDR_RT_W_1  0x00605820u  /* mov eax, [dword_2976700] in sub_605800 */
-#define ADDR_RT_H_2  0x00605894u  /* ... in sub_605890 */
-#define ADDR_RT_W_2  0x006058A3u
-#define ADDR_RT_H_3  0x00605989u  /* the same loads in a third render target creator (character pass) */
-#define ADDR_RT_W_3  0x00605995u
-#define ADDR_BACKBUFFER_W 0x02976700u
-#define ADDR_BACKBUFFER_H 0x02976704u
 
 /*
  * VSync and window mode. sub_6E3940 (device create / reset, Accept in Video Settings calls it with
@@ -218,15 +193,7 @@ typedef void (__cdecl *InputSelectFn)(int ctx);
  * IDirect3DDevice9::SetRenderTarget, SetViewport and SetScissorRect are hooked through the
  * device vtable; while render target 0 is one of the scaled targets the rectangles are scaled.
  */
-#define VT_SET_RENDER_TARGET 37
-#define VT_SET_VIEWPORT      47
-#define VT_GET_RENDER_TARGET 38
-#define VT_SET_DEPTH_STENCIL 39
-#define VT_GET_DEPTH_STENCIL 40
-#define VT_SET_SCISSOR_RECT  75
 #define VT_SET_VS_CONST_F    94
-#define VT_SET_PS_CONST_F    109
-#define ADDR_BUILD_TARGETS    0x006E2D20u  /* sub_6E2D20(this): (re)creates the effect render targets */
 #define ADDR_DEVICE_OBJECT   0x029765C8u   /* this; *(this + 4) is the IDirect3DDevice9 */
 
 #define MAX_DUMP_TEX 4096
@@ -242,7 +209,6 @@ typedef int (__cdecl *MenuUpdateFn)(int menu);
 
 typedef int (__cdecl *MenuRowFn)(int menu, const char *text, int alpha);
 
-typedef int (__attribute__((thiscall)) *BuildTargetsFn)(void *device);
 
 typedef int (__cdecl *PauseRowFn)(int menu, const char *text);
 

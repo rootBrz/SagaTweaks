@@ -13,7 +13,7 @@ Linux specific.
 | Frame rate | Removes the 85 fps cap, runs at the desktop refresh rate (shown in Video Settings). |
 | Frame-rate fixes | Clock counters, blink timers, grass and foliage animation, collision response and jumps behave as at 60 fps (same jump height, jumps from platforms and over the fallen tree work, at 60 and 1000 fps). |
 | Display | **VSync** and **Window Mode** (fullscreen / windowed / borderless) rows in Video Settings. |
-| Render scale | 50-300 % internal resolution, native row in Video Settings. Effects and the HUD pass are depth-tested at the scaled size. |
+| Render scale | 50-300 % internal resolution, native row in Video Settings. The game itself runs at the larger size (windowed or borderless; the Fullscreen choice is skipped while the scale is not 100 %) and the picture is scaled to the window on present. |
 | FSAA | Row removed from Effects Settings: render scale supersamples the whole frame and replaces it. |
 | Input | Player 1 hot-switches keyboard / gamepad. A second gamepad joins as player 2 with **Start**; lost pads drop out cleanly and never lock the pause menu. |
 | Prompts | Xbox or PlayStation button glyphs, chosen per player (e.g. Xbox for P1, DualShock for P2). |
@@ -53,8 +53,7 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `LogicHz` | 0 | Most game logic updates per second (0 = every frame). |
 | `FixJumpPhysics` | 1 | Jump impulse corrected to the 60 fps lift and height. |
 
-Debug-only keys (`LogFPS`, `LiveIni` (rereads `LogicHz`, `MaxFPS` and the fix switches once a second), `ProbeSweep` (logs the hero's collision sweeps), `ProbeHero` (one log line per logic update of player 1 near the log of Speeder Showdown: position, velocity, flags, input; read with `tools/audit/trace_jumps.py`), `TraceRT` (also enables `<ini>.scale` run-time scale changes and depth diagnostics), `TracePasses`, `SkipPass`, `SkipScaledPass`,
-`DumpTextures`) exist for reverse engineering; see `docs/REVERSING.md`.
+Debug-only keys (`LogFPS`, `LiveIni` (rereads `LogicHz`, `MaxFPS` and the fix switches once a second), `ProbeSweep` (logs the hero's collision sweeps), `ProbeHero` (one log line per logic update of player 1 near the log of Speeder Showdown: position, velocity, flags, input; read with `tools/audit/trace_jumps.py`), `ProbeConsts`, `DumpTextures`) exist for reverse engineering; see `docs/REVERSING.md`.
 
 ## Build
 
