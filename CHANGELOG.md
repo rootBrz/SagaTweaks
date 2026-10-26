@@ -2,20 +2,19 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
-## Unreleased
+## 1.1.0
 
-- Fixed: jumping at high frame rates. The first frame of a jump lifts the player by only speed x frame time, which is too little for the contact test of platforms (the pallet at the start of Episode VI "Speeder Showdown"), so the jump was cancelled and the fallen tree could not be cleared. The jump impulse now gives the same first-frame lift and the same apex as at 60 fps, at any frame rate. Jump height used to be up to 4 % lower at 120 fps and above even on the ground.
-- Fixed: grass and foliage ran about 14x too fast at high frame rates (constant wobble when standing still). The wind and sway phase, the wobble springs, the grass chains and the effect timeline are written for one step per 1/60 s; they are now stepped 60 times per second of real time at any frame rate.
-- Fixed: slow turning and stalled heading changes at high frame rates (angle steps were truncated to whole units every frame), a missed 0.001 contact push-out, and the wall-push timer, which fired after 4 frames (5 ms at 850 fps) instead of 67 ms.
-- Fixed: more per-frame gameplay rates found by a whole-loop code audit: 28 `(int)(rate x dt)` truncations that lost their fraction at high frame rates (turning, spinning and sliding entities stalled), the lightning arc's velocity kick on the hero, the rope damping, several per-call rotation steps and timers, hero knockback and object pushes, particle emitter lifetimes, and two call-counted state counters. They can be disabled with `FixGameplayRates=0`.
-- Fixed: hero physics that decayed per frame instead of per second at high frame rates (velocity on the step-up over the fallen tree in Speeder Showdown, platform and speed-boost terms, slow turning).
-- Fixed (untested on the device): the ledge probe of the step-up (`sub_68EE40`) used tolerances scaled for `move x dt` vectors on a fixed 0.2 long vector, so at 850 fps it stopped 0.014 above the ledge instead of 0.001. That is the size of the gap by which the jump over the fallen tree in Speeder Showdown stopped short. Part of `FixGameplayRates`.
-- Fixed (tested on the Deck: 10 of 10 jumps over the fallen tree at 850 fps, speed into the wall within 1 % of 60 fps early in the jump): the contact velocity blend (`FixContactVelocity`) is corrected for the walk easing, two more push-out loads (`sub_679310`, an editor handler) are scaled with the step.
-- Fixed: **FPS Limit** values below the display's refresh rate did nothing, and the others overshot (90 gave 97 fps). Every value of the Tweaks list now holds exactly.
+- New: **VSync** and **Window Mode** (fullscreen / windowed / borderless windowed) rows in Video Settings. `VSync` and `WindowMode` in the ini. Changes apply at once.
+- New: **FPS Limit** values below the display's refresh rate now work, and every value of the Tweaks list holds exactly (90 used to give 97 fps).
+- Changed: `LogicHz` defaults to 0 (game logic runs every frame). The old cap of 120 is no longer needed.
+- Fixed: the fallen tree in Episode VI "Speeder Showdown" can be climbed at any frame rate. At very high frame rates only about one jump in three worked; the jump now behaves like at 60 fps (10 of 10 jumps at 850 fps in tests). Causes: the ledge probe of the step-up used tolerances meant for one 60 fps step, and the velocity kept after a contact at short steps was too low.
+- Fixed: jumps at high frame rates. The first frame of a jump lifted the player too little, so jumps from platforms were cancelled and jump height was up to 4 % lower. The jump now has the same first-frame lift and the same height as at 60 fps.
+- Fixed: grass and foliage ran about 14 times too fast at high frame rates (constant wobble when standing still). Wind, sway, wobble, grass chains and the effect timeline are now stepped 60 times per second of real time.
+- Fixed: many more per-frame gameplay rates found by a code audit of the whole game loop: slow or stalled turning, spinning and sliding entities, the lightning arc kick, rope damping, hero knockback and object pushes, particle lifetimes, the wall-push timer, and several hero physics terms that decayed per frame instead of per second. `FixGameplayRates=0` turns the audit fixes off.
 - Fixed: the audio of a skipped cutscene kept playing over the level.
-- Fixed: review pass. The frame-count debounces (player dropped or pad gone: 60 frames, window mode start: 30 frames) are now real time (1 s and 0.5 s); at 1000 fps they were 16x too short. The join-prompt rewriter only overwrites the known prompt text, never memory the game has reused. Invalid ini values (`ButtonPrompts*` out of range, negative `MaxFPS` or `RefreshRate`) are clamped, and the window mode code checks the mode table before using it.
-- Changed: `LogicHz` now defaults to 0 (game logic runs every frame). The 120 cap dated from before the frame-rate fixes; with them the log in Speeder Showdown is climbable uncapped.
-- New: **VSync** and **Window Mode** (fullscreen / windowed / borderless windowed) rows in Video Settings; `VSync` and `WindowMode` in the ini. Changes apply at once.
+- Fixed: a dropped or unplugged gamepad was released after 60 frames, which is 60 ms at 1000 fps; it is now 1 second. The window mode is applied 0.5 s after start instead of after 30 frames.
+- Fixed: the join prompt text could overwrite memory the game had reused. The prompt scan no longer runs while `HotSwitchInput` is off.
+- Fixed: invalid ini values (`ButtonPrompts` outside 0-2, negative `MaxFPS` or `RefreshRate`) are clamped instead of crashing the Tweaks page; the window mode code checks the display mode table before using it.
 
 ## 1.0.2
 

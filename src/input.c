@@ -450,7 +450,7 @@ static DWORD WINAPI JoinTextThread(LPVOID param)
     (void)param;
     for (;;) {
         Sleep(g_join_found ? 1000 : 3000);
-        if (!g_join_found && tries++ < 40) {
+        if (!g_join_found && g_hot_switch && tries++ < 40) {     /* nothing to rewrite while Start-only joining is off */
             ScanJoinText();
             if (g_join_found && g_log) {
                 fprintf(g_log, "join prompt text found (%d copies)\n", g_join_found);
