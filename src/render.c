@@ -310,6 +310,74 @@ static IDirect3DSurface9 *VirtualBackbuffer(IDirect3DDevice9 *dev, IDirect3DSurf
     return g_virtual_bb;
 }
 
+/*
+ * Black overlay of the given opacity over the real backbuffer (cutscene skip fades). The device state is saved in a state
+ * block and put back, the render target and viewport go through the original (unhooked) calls so a scaled backbuffer is
+ * not redirected.
+ */
+static void DrawFadeOverlay(IDirect3DDevice9 *dev, float alpha)
+{
+    IDirect3DStateBlock9 *sb = NULL;
+    IDirect3DSurface9 *bb = NULL, *old_rt = NULL;
+    D3DSURFACE_DESC desc;
+    D3DVIEWPORT9 vp;
+    struct { float x, y, z, rhw; DWORD color; } v[4];
+    DWORD color = (DWORD)(alpha * 255.0f + 0.5f) << 24;
+    int i;
+
+    if (!g_orig_set_rt || !g_orig_set_viewport ||
+        FAILED(IDirect3DDevice9_GetBackBuffer(dev, 0, 0, D3DBACKBUFFER_TYPE_MONO, &bb)) || !bb)
+        return;
+    IDirect3DSurface9_GetDesc(bb, &desc);
+    IDirect3DDevice9_GetRenderTarget(dev, 0, &old_rt);
+    if (SUCCEEDED(IDirect3DDevice9_CreateStateBlock(dev, D3DSBT_ALL, &sb)) && sb) {
+        vp = (D3DVIEWPORT9){ 0, 0, desc.Width, desc.Height, 0.0f, 1.0f };
+        for (i = 0; i < 4; i++) {
+            v[i].x = (i & 1) ? (float)desc.Width : 0.0f;
+            v[i].y = (i & 2) ? (float)desc.Height : 0.0f;
+            v[i].z = 0.0f;
+            v[i].rhw = 1.0f;
+            v[i].color = color;
+        }
+        g_orig_set_rt(dev, 0, bb);
+        g_orig_set_viewport(dev, &vp);
+        IDirect3DDevice9_SetVertexShader(dev, NULL);
+        IDirect3DDevice9_SetPixelShader(dev, NULL);
+        IDirect3DDevice9_SetTexture(dev, 0, NULL);
+        IDirect3DDevice9_SetFVF(dev, D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_ZENABLE, FALSE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_ZWRITEENABLE, FALSE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_CULLMODE, D3DCULL_NONE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_LIGHTING, FALSE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_FOGENABLE, FALSE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_STENCILENABLE, FALSE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_SCISSORTESTENABLE, FALSE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_ALPHATESTENABLE, FALSE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_COLORWRITEENABLE, 0xF);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_SRGBWRITEENABLE, FALSE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_ALPHABLENDENABLE, TRUE);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_BLENDOP, D3DBLENDOP_ADD);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+        IDirect3DDevice9_SetRenderState(dev, D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        IDirect3DDevice9_SetTextureStageState(dev, 0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+        IDirect3DDevice9_SetTextureStageState(dev, 0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+        IDirect3DDevice9_SetTextureStageState(dev, 0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+        IDirect3DDevice9_SetTextureStageState(dev, 0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+        IDirect3DDevice9_SetTextureStageState(dev, 1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        if (SUCCEEDED(IDirect3DDevice9_BeginScene(dev))) {
+            IDirect3DDevice9_DrawPrimitiveUP(dev, D3DPT_TRIANGLESTRIP, 2, v, sizeof v[0]);
+            IDirect3DDevice9_EndScene(dev);
+        }
+        IDirect3DStateBlock9_Apply(sb);
+        IDirect3DStateBlock9_Release(sb);
+    }
+    if (old_rt) {
+        g_orig_set_rt(dev, 0, old_rt);
+        IDirect3DSurface9_Release(old_rt);
+    }
+    IDirect3DSurface9_Release(bb);
+}
+
 static HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9 *dev, const RECT *src, const RECT *dst, HWND wnd, const RGNDATA *dirty)
 {
     if (g_vbb_used && g_virtual_bb && g_real_bb && g_render_scale != 1.0)
@@ -323,22 +391,8 @@ static HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9 *dev, const RECT *
                  *(uint8_t *)0x95077C, *(int *)0x87658C, *(int *)0x951B80 != 0, *(int *)0x951BE0);
         Log(buf);
     }
-    if (g_cutscene_skipping) {
-        IDirect3DSurface9 *bb = NULL;
-
-        if (SUCCEEDED(IDirect3DDevice9_GetBackBuffer(dev, 0, 0, D3DBACKBUFFER_TYPE_MONO, &bb)) && bb) {
-            HRESULT hr = IDirect3DDevice9_ColorFill(dev, bb, NULL, 0xFF000000);
-            static int logged;
-
-            if (FAILED(hr) && !logged++) {
-                char buf[64];
-
-                snprintf(buf, sizeof buf, "skip black fill failed: %08lx", (unsigned long)hr);
-                Log(buf);
-            }
-            IDirect3DSurface9_Release(bb);
-        }
-    }
+    if (g_skip_fade > 0.001f)
+        DrawFadeOverlay(dev, g_skip_fade);
     if (g_probe_consts)
         ProbeFrame();
     if (g_log_fps) {

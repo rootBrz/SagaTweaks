@@ -16,6 +16,13 @@ void Log(const char *msg)
     }
 }
 
+DWORD TickNonZero(void)
+{
+    DWORD t = GetTickCount();
+
+    return t ? t : 1;
+}
+
 int WritePatch(uintptr_t addr, const void *bytes, size_t len)
 {
     DWORD old;

@@ -348,7 +348,7 @@ static void UpdatePromptStyle(void)
     if (!last || GetTickCount() - last >= 2000) {     /* every 2 s, not every 120 frames (8 times a second at 1000 fps) */
         int i;
 
-        last = GetTickCount() | 1;
+        last = TickNonZero();
 
         for (i = 0; i < 16; i++)
             g_sony[i] = PadIsSony(i);

@@ -13,6 +13,20 @@ DWORD g_skip_done_tick, g_skip_first_tick;
 int g_cutscene_skipping;
 
 /*
+ * Fades around a skip. The picture fades to black while the cutscene still plays (FADE_OUT_MS), the skip then runs
+ * hidden behind black, and gameplay fades in from black (FADE_IN_MS). g_skip_fade (0 = clear, 1 = black) is drawn over
+ * the frame by the Present hook. A stock Start press does nothing in a cutscene, so letting the game run during the
+ * fade-out is safe.
+ */
+#define FADE_OUT_MS 250
+#define FADE_IN_MS  350
+
+float g_skip_fade;
+static DWORD g_fade_out_since;   /* tick count when the fade-out started, 0 = not fading out */
+static DWORD g_fade_in_since;
+static int g_was_black;
+
+/*
  * Pressing Start during a cutscene skips it: every playing cutscene animation (dword_951C3C[],
  * count dword_951C80) is moved to its last moment, so the game's own end-of-cutscene handling
  * (fade, returning control, loading the next level) runs on the next update.
@@ -139,6 +153,7 @@ static void CutsceneSkip(int cur, int titles)
     if (!g_skip_cutscenes || !cur || cur == titles) {
         prev_start = g_skip_active = 0;
         g_skip_arm_until = 0;
+        g_fade_out_since = 0;
         return;
     }
     start = StartPressed();
@@ -169,7 +184,12 @@ static void CutsceneSkip(int cur, int titles)
             quiet_since = 0;
         }
     }
-    if (edge && !g_skip_active) {
+    if (edge && !g_skip_active && !g_fade_out_since && active) {
+        g_fade_out_since = TickNonZero();
+        Log("cutscene skip: fading out");
+    }
+    if (g_fade_out_since && now - g_fade_out_since >= FADE_OUT_MS) {
+        g_fade_out_since = 0;
         if (active) {
             g_skip_tick = g_skip_first_tick = now;
             g_skip_active = 1;
@@ -235,8 +255,45 @@ static void RunCutsceneSkip(int game, int *out)
     }
     g_cutscene_skipping = g_skip_active || GetTickCount() < g_skip_arm_until;
 }
+static void CutsceneFrameInner(int game, int *out, int cur, int titles);
+
+static void UpdateFade(void)
+{
+    DWORD now = GetTickCount();
+
+    if (g_fade_out_since) {
+        g_skip_fade = (float)(now - g_fade_out_since) / FADE_OUT_MS;
+        if (g_skip_fade > 1.0f)
+            g_skip_fade = 1.0f;
+    } else if (g_cutscene_skipping) {
+        g_skip_fade = 1.0f;
+        g_was_black = 1;
+        g_fade_in_since = 0;
+    } else {
+        if (g_was_black) {
+            g_was_black = 0;
+            g_fade_in_since = TickNonZero();
+        }
+        g_skip_fade = 0.0f;
+        if (g_fade_in_since) {
+            DWORD e = now - g_fade_in_since;
+
+            if (e >= FADE_IN_MS)
+                g_fade_in_since = 0;
+            else
+                g_skip_fade = 1.0f - (float)e / FADE_IN_MS;
+        }
+    }
+}
+
 /* Runs one game frame, or the cutscene skip in its place. */
 void CutsceneFrame(int game, int *out, int cur, int titles)
+{
+    CutsceneFrameInner(game, out, cur, titles);
+    UpdateFade();
+}
+
+static void CutsceneFrameInner(int game, int *out, int cur, int titles)
 {
     CutsceneSkip(cur, titles);
     if (g_skip_active) {

@@ -110,7 +110,7 @@ void WindowFrame(void)
     if (done || !*(void **)(ADDR_DEVICE_OBJECT + 4))
         return;
     if (!since)
-        since = GetTickCount() | 1;
+        since = TickNonZero();
     if (GetTickCount() - since < STARTUP_MS)
         return;
     done = 1;

@@ -6,6 +6,7 @@
 extern FILE *g_log;
 extern char g_ini_path[MAX_PATH];
 void Log(const char *msg);
+DWORD TickNonZero(void);   /* GetTickCount() that is never 0, so 0 can mean "not started" */
 int WritePatch(uintptr_t addr, const void *bytes, size_t len);
 void PatchVtableEntry(void **vtable, int index, void *hook, void **orig);
 int Matches(uintptr_t addr, const void *bytes, size_t len);

@@ -2,6 +2,11 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.1.3
+
+- New: skipping a cutscene fades to black (a quarter of a second, the cutscene keeps playing) and fades gameplay in from black, instead of cutting.
+- Fixed: a dropped gamepad could be released immediately instead of after one second, and the window mode and button-prompt timers could fire at once. The elapsed-time checks added in 1.1.0 were wrong about every other millisecond.
+
 ## 1.1.2
 
 - Fixed: the lightsaber trail disappeared for good after the first swing when the frame rate is unlocked. The saber added one trail segment per frame to a pool of 128, which ran dry within one swing at high frame rates. Segments are now added 60 times per second at any frame rate, like at 60 fps. `FixGameplayRates=0` turns it off.

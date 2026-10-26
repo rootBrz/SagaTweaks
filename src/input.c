@@ -55,7 +55,7 @@ static int HandleDroppedPlayer1(void)
         return 0;
     }
     if (!g_p1_inactive_since) {
-        g_p1_inactive_since = GetTickCount() | 1;
+        g_p1_inactive_since = TickNonZero();
         if (g_log) {
             int status0 = ((int (__cdecl *)(int))ADDR_CONTROLLER_STATUS)(0);
             int status1 = ((int (__cdecl *)(int))ADDR_CONTROLLER_STATUS)(1);
@@ -139,7 +139,7 @@ static void HandleDisconnectedPlayer2(void)
         return;
     }
     if (!g_p2_gone_since)
-        g_p2_gone_since = GetTickCount() | 1;
+        g_p2_gone_since = TickNonZero();
     if (!g_p2_released && GetTickCount() - g_p2_gone_since >= DROP_DEBOUNCE_MS) {
         g_p2_released = 1;
         ((AssignDeviceFn)ADDR_ASSIGN_DEVICE)(1, -1);
