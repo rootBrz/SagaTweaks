@@ -7,20 +7,8 @@
 
 int g_skip_cutscenes = 1;
 
-/*
- * Fades around a skip. The picture fades to black while the cutscene still plays (FADE_OUT_MS), the skip then ends the
- * cutscene behind black, and gameplay fades in from black (FADE_IN_MS). g_skip_fade (0 = clear, 1 = black) is drawn
- * over the frame by the Present hook. A stock Start press does nothing in a cutscene, so letting the game run during
- * the fade-out is safe.
- */
-#define FADE_OUT_MS 250
-#define FADE_IN_MS  350
-
-float g_skip_fade;
-static DWORD g_fade_out_since;   /* tick count when the fade-out started, 0 = not fading out */
-static DWORD g_fade_in_since;
-static int g_was_black;
-static int g_skipping;           /* the cutscene is being ended; the screen stays black until it is over */
+static int g_skipping;    /* the cutscene is being ended; the captured picture covers the screen until it is over */
+static int g_skip_phase;  /* 1 = the picture was asked for, 2 = it is held */
 
 /*
  * Pressing Start during a cutscene skips it: every playing cutscene animation (dword_951C3C[],
@@ -122,13 +110,35 @@ static int FinishCutsceneAnims(int game, int force)
 #define SKIP_QUIET_MS        200    /* nothing playing, pending or wiping for this long: no further part follows */
 #define SKIP_FORCE_MS        250    /* a part that did not end by itself in this time is marked finished */
 
-#define ADDR_WIPE_PROGRESS   0x00950780u  /* flt_950780: screen wipe, 1 = covered, falls to 0 while a scene is wiped in */
+/*
+ * The transition manager (byte_95077C) is the game's own screen wipe, the "Star Wars wipe": +0 = style bits (1/2 = sideways,
+ * 4/8 = up and down), +4 = progress (1 = covered,
+ * falls to 0), +8 = rate per second, +36 = wipe style in use (-1 = none). A wipe-in (sub_5B11B0(1)) shows the picture
+ * that was captured with byte_950740 (taken at the end of the frame) covering the screen and sweeping it away over the
+ * live scene. The skip captures the cutscene's last picture, holds it (rate 0) while the cutscene ends behind it,
+ * and lets the sweep run once gameplay is back, like the stock end of a cutscene.
+ */
+#define ADDR_WIPE_MANAGER    0x0095077Cu
+#define ADDR_WIPE_PROGRESS   0x00950780u
+#define ADDR_WIPE_RATE       0x00950784u
+#define ADDR_WIPE_CAPTURE    0x00950740u  /* byte_950740: capture the screen at the end of this frame */
+#define WIPE_STYLE_PICTURE   2            /* the wipe that sweeps a captured picture away */
+#define WIPE_IN_RATE         -1.3333334f  /* what the game's own wipe-in uses */
+
 #define ADDR_LEVEL_REQUEST   0x0087658Cu
 #define ADDR_NEXT_LEVEL      0x00951B80u
 
+typedef int (__attribute__((thiscall)) *WipeSelectFn)(void *, int *, int);
+typedef int (__attribute__((thiscall)) *WipeStartFn)(void *, int);
+typedef int (__cdecl *PlaySoundFn)(const char *, int);
+
+#define ADDR_WIPE_SELECT     0x005B1220u
+#define ADDR_WIPE_START      0x005B11B0u
+#define ADDR_PLAY_SOUND      0x00681F40u
+
 /*
  * The cutscene's music and dialogue are streams of the audio object at 0x924DF8 (two slots). The game stops them with
- * sub_693FD0 (thiscall, one argument) when a level changes; g_skipping inside a level never did, so the cutscene's sound
+ * sub_693FD0 (thiscall, one argument) when a level changes; skipping inside a level never did, so the cutscene's sound
  * went on over the gameplay.
  */
 #define ADDR_AUDIO_OBJECT    0x00924DF8u
@@ -138,33 +148,47 @@ typedef int (__attribute__((thiscall)) *StopStreamsFn)(void *, int);
 
 static void CutsceneSkip(int game, int cur, int titles)
 {
-    static int prev_start;
+    static int prev_start, holding, style_bits;
     static DWORD busy_since, part_since, quiet_since;
     DWORD now = GetTickCount();
-    int start, active;
+    int start, active, pending;
 
     if (!g_skip_cutscenes || !cur || cur == titles) {
-        prev_start = g_skipping = 0;
-        g_fade_out_since = 0;
+        prev_start = g_skipping = g_skip_phase = holding = 0;
         return;
     }
     start = StartPressed();
     active = *(int *)ADDR_CUTSCENE_ACTIVE;
-    if (start && !prev_start && active && !g_skipping && !g_fade_out_since) {
-        g_fade_out_since = TickNonZero();
-        Log("cutscene skip: fading out");
-    }
-    prev_start = start;
-    if (g_fade_out_since && !active)
-        g_fade_out_since = 0;                    /* the cutscene ended by itself meanwhile */
-    if (g_fade_out_since && now - g_fade_out_since >= FADE_OUT_MS) {
-        g_fade_out_since = 0;
+    pending = *(int *)ADDR_LEVEL_REQUEST || *(int *)ADDR_NEXT_LEVEL;
+    if (start && !prev_start && active && !g_skipping) {
+        *(uint8_t *)ADDR_WIPE_CAPTURE = 1;       /* the picture of this frame is the one that is held */
         g_skipping = 1;
+        g_skip_phase = 1;
         busy_since = now;
         Log("cutscene skipped");
+        prev_start = start;
+        return;
     }
+    prev_start = start;
     if (!g_skipping)
         return;
+    if (g_skip_phase == 1) {
+        int style = WIPE_STYLE_PICTURE;
+
+        ((WipeSelectFn)ADDR_WIPE_SELECT)((void *)ADDR_WIPE_MANAGER, &style, 0);
+        ((WipeStartFn)ADDR_WIPE_START)((void *)ADDR_WIPE_MANAGER, 1);
+        g_skip_phase = 2;
+        holding = 1;
+        style_bits = *(int *)ADDR_WIPE_MANAGER;   /* the style the game picked at the start */
+        if (!(style_bits & 3))
+            style_bits = 1;                       /* a sideways sweep */
+    }
+    if (pending)
+        holding = 0;                             /* a level change: the game covers and loads by itself */
+    if (holding) {
+        *(float *)ADDR_WIPE_RATE = 0.0f;
+        *(int *)ADDR_WIPE_MANAGER = style_bits;   /* the end of a cutscene clears it */
+    }
     if (active) {
         busy_since = now;
         quiet_since = 0;
@@ -174,43 +198,20 @@ static void CutsceneSkip(int game, int cur, int titles)
         return;
     }
     part_since = 0;
-    if (*(int *)ADDR_LEVEL_REQUEST || *(int *)ADDR_NEXT_LEVEL || *(float *)ADDR_WIPE_PROGRESS > 0.0f)
+    /* a wipe of the game's own (after a level change) still running is not "quiet" */
+    if (pending || (!holding && *(float *)ADDR_WIPE_PROGRESS > 0.0f))
         quiet_since = 0;
     else if (!quiet_since)
         quiet_since = now;
     if (now - busy_since >= SKIP_FOLLOW_MS || (quiet_since && now - quiet_since >= SKIP_QUIET_MS)) {
-        g_skipping = 0;
+        g_skipping = g_skip_phase = 0;
+        if (holding) {
+            holding = 0;
+            *(float *)ADDR_WIPE_RATE = WIPE_IN_RATE;
+            ((PlaySoundFn)ADDR_PLAY_SOUND)("WipeScreen", 0);
+        }
         ((StopStreamsFn)ADDR_STOP_STREAMS)((void *)ADDR_AUDIO_OBJECT, 0);
         Log("cutscene skip done");
-    }
-}
-
-static void UpdateFade(void)
-{
-    DWORD now = GetTickCount();
-
-    if (g_fade_out_since) {
-        g_skip_fade = (float)(now - g_fade_out_since) / FADE_OUT_MS;
-        if (g_skip_fade > 1.0f)
-            g_skip_fade = 1.0f;
-    } else if (g_skipping) {
-        g_skip_fade = 1.0f;
-        g_was_black = 1;
-        g_fade_in_since = 0;
-    } else {
-        if (g_was_black) {
-            g_was_black = 0;
-            g_fade_in_since = TickNonZero();
-        }
-        g_skip_fade = 0.0f;
-        if (g_fade_in_since) {
-            DWORD e = now - g_fade_in_since;
-
-            if (e >= FADE_IN_MS)
-                g_fade_in_since = 0;
-            else
-                g_skip_fade = 1.0f - (float)e / FADE_IN_MS;
-        }
     }
 }
 
@@ -219,5 +220,4 @@ void CutsceneFrame(int game, int *out, int cur, int titles)
 {
     CutsceneSkip(game, cur, titles);
     FramerateGameFrame(game, out);
-    UpdateFade();
 }
