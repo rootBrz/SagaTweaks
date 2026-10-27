@@ -351,6 +351,13 @@ Notes because it took many wrong turns:
    the window after 200 ms of "nothing pending, no wipe, no cutscene".
 6. The remaining wait is the real level load; it cannot be skipped, only hidden.
 
+7. (1.1.6) Skip = move each part's animation time to `length - 1 - 1.5 * step` (`anim+144`, data `anim+88`,
+   `+8` = length) and let the game end it; marking it finished (`0x1000`) skips the completion callback
+   (`anim+180`), which is what makes things like Jar Jar joining happen. The screen wipe is the transition
+   manager at `0x95077C` (`+0` style bits, `+4` progress, `+8` rate, `+36` id): capture the picture with
+   `byte_950740`, `sub_5B1220(&2)` + `sub_5B11B0(1)` start a wipe-in that sweeps the captured picture away;
+   hold it with rate 0 (and rewrite the style, the end of a cutscene clears it) until gameplay is back.
+
 Verification trick: brightness-per-frame from raw capture proved no non-black frame is presented
 between pressing Start and gameplay.
 

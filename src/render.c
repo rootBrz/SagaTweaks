@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * D3D9 device hooks: Present (cutscene skip fade, frame statistics), SetTexture / CreateTexture (button prompts, texture
+ * D3D9 device hooks: Present (frame statistics), SetTexture / CreateTexture (button prompts, texture
  * dump), shader constant probe (debug), and the video mode table's refresh rates. The render scale itself is a
  * backbuffer size and lives in window.c.
  */

@@ -2,6 +2,14 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.1.6
+
+- Fixed: skipping a cutscene in the middle of a level skipped what comes after it. In "Invasion of Naboo" Jar Jar did not join the party after the skipped cutscene, and the same cutscene could be triggered again after going to the next part of the level and back. A skipped cutscene now ends the way a played one does: Start moves it to just before its end and the game ends it itself.
+- Changed: skipping a cutscene now uses the game's own "Star Wars" screen wipe, instead of a fade to black. The cutscene's last picture stays on screen while the cutscene (and any parts that follow, including level changes) is skipped, then sweeps away over the gameplay. The black fade is gone.
+- Fixed: the game always opened in exclusive fullscreen and only switched to the saved window mode on the main menu; on Windows the borderless mode then came out as a framed window while Video Settings said Borderless. A borderless mode is now set up before the first device is created, and the window style is restored if Direct3D overwrote it.
+- Fixed: the keyboard did not hot-switch to a gamepad when only its analog sticks or triggers were used. They count as input now.
+- Changed: the render scale is a backbuffer size (the video mode's size times the scale) instead of hooked render targets. This fixes the heat distortion, doubled shadows and the doubled HUD on the pause screen with a scale above 100 %, and does not depend on DXVK. Fullscreen is not offered while the scale is not 100 %.
+
 ## 1.1.5
 
 - Fixed: after pausing at a render scale other than 100 %, setting the scale back to 100 % and pausing again showed the frame from the earlier pause behind the menu.
