@@ -109,6 +109,7 @@ static int FinishCutsceneAnims(int game, int force)
 #define SKIP_FOLLOW_MS       3000
 #define SKIP_QUIET_MS        200    /* nothing playing, pending or wiping for this long: no further part follows */
 #define SKIP_FORCE_MS        250    /* a part that did not end by itself in this time is marked finished */
+#define SKIP_MAX_MS          10000  /* a whole skip, however many parts, is over after this */
 
 /*
  * The transition manager (byte_95077C) is the game's own screen wipe, the "Star Wars wipe": +0 = style bits (1/2 = sideways,
@@ -146,15 +147,30 @@ typedef int (__cdecl *PlaySoundFn)(const char *, int);
 
 typedef int (__attribute__((thiscall)) *StopStreamsFn)(void *, int);
 
+/* Ends the skip: lets the held picture sweep away (when one is held) and stops the cutscene's sound. */
+static void EndSkip(int *holding, int sound)
+{
+    g_skipping = g_skip_phase = 0;
+    if (*holding) {
+        *holding = 0;
+        *(float *)ADDR_WIPE_RATE = WIPE_IN_RATE;
+        if (sound)
+            ((PlaySoundFn)ADDR_PLAY_SOUND)("WipeScreen", 0);
+    }
+    if (sound)
+        ((StopStreamsFn)ADDR_STOP_STREAMS)((void *)ADDR_AUDIO_OBJECT, 0);
+}
+
 static void CutsceneSkip(int game, int cur, int titles)
 {
     static int prev_start, holding, style_bits;
-    static DWORD busy_since, part_since, quiet_since;
+    static DWORD skip_since, busy_since, part_since, quiet_since;
     DWORD now = GetTickCount();
     int start, active, pending;
 
     if (!g_skip_cutscenes || !cur || cur == titles) {
-        prev_start = g_skipping = g_skip_phase = holding = 0;
+        prev_start = 0;
+        EndSkip(&holding, 0);                    /* the option was turned off, or the level is gone: never leave the screen covered */
         return;
     }
     start = StartPressed();
@@ -164,7 +180,7 @@ static void CutsceneSkip(int game, int cur, int titles)
         *(uint8_t *)ADDR_WIPE_CAPTURE = 1;       /* the picture of this frame is the one that is held */
         g_skipping = 1;
         g_skip_phase = 1;
-        busy_since = now;
+        busy_since = skip_since = now;
         Log("cutscene skipped");
         prev_start = start;
         return;
@@ -182,6 +198,11 @@ static void CutsceneSkip(int game, int cur, int titles)
         style_bits = *(int *)ADDR_WIPE_MANAGER;   /* the style the game picked at the start */
         if (!(style_bits & 3))
             style_bits = 1;                       /* a sideways sweep */
+    }
+    if (now - skip_since >= SKIP_MAX_MS) {
+        Log("cutscene skip gave up");
+        EndSkip(&holding, 1);                    /* a cutscene that never ends must not keep the picture frozen */
+        return;
     }
     if (holding) {
         *(float *)ADDR_WIPE_RATE = 0.0f;
@@ -201,13 +222,7 @@ static void CutsceneSkip(int game, int cur, int titles)
     else if (!quiet_since)
         quiet_since = now;
     if (now - busy_since >= SKIP_FOLLOW_MS || (quiet_since && now - quiet_since >= SKIP_QUIET_MS)) {
-        g_skipping = g_skip_phase = 0;
-        if (holding) {
-            holding = 0;
-            *(float *)ADDR_WIPE_RATE = WIPE_IN_RATE;
-            ((PlaySoundFn)ADDR_PLAY_SOUND)("WipeScreen", 0);
-        }
-        ((StopStreamsFn)ADDR_STOP_STREAMS)((void *)ADDR_AUDIO_OBJECT, 0);
+        EndSkip(&holding, 1);
         Log("cutscene skip done");
     }
 }
