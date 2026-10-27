@@ -183,8 +183,6 @@ static void CutsceneSkip(int game, int cur, int titles)
         if (!(style_bits & 3))
             style_bits = 1;                       /* a sideways sweep */
     }
-    if (pending)
-        holding = 0;                             /* a level change: the game covers and loads by itself */
     if (holding) {
         *(float *)ADDR_WIPE_RATE = 0.0f;
         *(int *)ADDR_WIPE_MANAGER = style_bits;   /* the end of a cutscene clears it */
@@ -198,8 +196,7 @@ static void CutsceneSkip(int game, int cur, int titles)
         return;
     }
     part_since = 0;
-    /* a wipe of the game's own (after a level change) still running is not "quiet" */
-    if (pending || (!holding && *(float *)ADDR_WIPE_PROGRESS > 0.0f))
+    if (pending)
         quiet_since = 0;
     else if (!quiet_since)
         quiet_since = now;
