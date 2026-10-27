@@ -176,9 +176,39 @@ void RenderScaleSet(double v)
     WindowApply();
 }
 
+/*
+ * The first device is created by sub_6E42D0 (called from sub_6DF080), and its "windowed" flag starts at 0: the game
+ * always opens in exclusive fullscreen, whatever the mode is set to, and the mode was only applied by a reset
+ * afterwards. A borderless mode is now set up before that first creation, so the window opens that way.
+ */
+#define ADDR_FIRST_DEVICE_CALL 0x006DF08Fu
+#define ADDR_FIRST_DEVICE_FN   0x006E42D0u
+
+static int g_started_borderless;
+
+static void __attribute__((thiscall)) FirstDevice(char *dev)
+{
+    HWND wnd = *(HWND *)ADDR_GAME_WINDOW;
+
+    if (g_window_mode == WINDOW_BORDERLESS && wnd) {
+        int *rect = (int *)ADDR_WINDOW_RECT;   /* nWidth, nHeight, X, Y */
+
+        rect[0] = GetSystemMetrics(SM_CXSCREEN);
+        rect[1] = GetSystemMetrics(SM_CYSCREEN);
+        rect[2] = rect[3] = 0;
+        dev[DEVICE_WINDOWED_OFS] = 1;
+        SetWindowLongA(wnd, GWL_STYLE, POPUP_STYLE);
+        SetWindowPos(wnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        g_started_borderless = 1;
+        Log("first device created borderless");
+    }
+    ((void (__attribute__((thiscall)) *)(void *))ADDR_FIRST_DEVICE_FN)(dev);
+}
+
 int WindowReady(void)
 {
     return Matches(ADDR_PRESENT_INTERVAL, k_interval_orig, sizeof k_interval_orig) &&
+           CallTo(ADDR_FIRST_DEVICE_CALL, ADDR_FIRST_DEVICE_FN) &&
            Matches(ADDR_BACKBUFFER_SIZE, k_bbsize_orig, sizeof k_bbsize_orig) &&
            CallTo(ADDR_MODE_FIND_CALL, ADDR_MODE_FIND_FN) && CallTo(ADDR_SAVE_W_CALL, ADDR_SAVE_W_FN) &&
            CallTo(ADDR_SAVE_H_CALL, ADDR_SAVE_H_FN);
@@ -187,6 +217,7 @@ int WindowReady(void)
 void WindowInstall(void)
 {
     g_present_interval = g_vsync ? 1 : D3DPRESENT_INTERVAL_IMMEDIATE_;
+    Log(PatchCall(ADDR_FIRST_DEVICE_CALL, FirstDevice) ? "first device hooked" : "first device hook FAILED");
     Log(PatchJmp(ADDR_PRESENT_INTERVAL, IntervalStub, 6) ? "vsync patched" : "vsync patch FAILED");
     {
         int ok = PatchJmp(ADDR_BACKBUFFER_SIZE, BackbufferSizeStub, 17);
@@ -218,6 +249,14 @@ void WindowApply(void)
     desk_h = *(int *)(dev + DEVICE_DESKTOP_H_OFS);
     if (wmode != WINDOW_FULLSCREEN && (desk_w <= 0 || desk_h <= 0))
         return;
+    /*
+     * The style change comes first: it sends WM_SIZE at once (on Windows; Wine defers it), and the game's handler
+     * stores the old window's size in nWidth / nHeight, which would replace the size set below and give a small
+     * window in the top left corner after the reset.
+     */
+    SetWindowLongA(wnd, GWL_STYLE, wmode == WINDOW_WINDOWED ? WINDOWED_STYLE : POPUP_STYLE);
+    SetWindowPos(wnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+
     if (wmode == WINDOW_WINDOWED) {
         int index = *(int *)(dev + DEVICE_MODE_INDEX_OFS), count = *(int *)(dev + DEVICE_MODE_COUNT_OFS);
         int *mode = *(int **)(dev + DEVICE_MODE_TABLE_OFS);
@@ -248,10 +287,25 @@ void WindowApply(void)
         rect[1] = desk_h;
         rect[2] = rect[3] = 0;
     }
-    SetWindowLongA(wnd, GWL_STYLE, wmode == WINDOW_WINDOWED ? WINDOWED_STYLE : POPUP_STYLE);
-    SetWindowPos(wnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     dev[DEVICE_WINDOWED_OFS] = (char)windowed;
     ((ApplyDeviceFn)ADDR_DEVICE_RESET)(dev, 1);
+    /*
+     * Leaving exclusive fullscreen, D3D9 puts back the window style it saved when the game went fullscreen (on Windows;
+     * Wine does not), which undoes the style set above: the first switch to borderless left a framed window. The
+     * window is then set up again.
+     */
+    if (wmode != WINDOW_FULLSCREEN) {
+        DWORD style = wmode == WINDOW_WINDOWED ? WINDOWED_STYLE : POPUP_STYLE;
+
+        if ((DWORD)GetWindowLongA(wnd, GWL_STYLE) != style) {
+            int x = wmode == WINDOW_WINDOWED ? (desk_w - rect[0]) / 2 : 0;
+            int y = wmode == WINDOW_WINDOWED ? (desk_h - rect[1]) / 2 : 0;
+
+            SetWindowLongA(wnd, GWL_STYLE, style);
+            SetWindowPos(wnd, NULL, x, y, rect[0], rect[1], SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            Log("window style restored after the device reset");
+        }
+    }
     Log("display mode applied");
 }
 
@@ -268,6 +322,8 @@ void WindowFrame(void)
     if (GetTickCount() - since < STARTUP_MS)
         return;
     done = 1;
+    if (g_started_borderless)
+        return;                                 /* already created that way */
     if (g_window_mode != WINDOW_FULLSCREEN || !g_vsync)
         WindowApply();
 }

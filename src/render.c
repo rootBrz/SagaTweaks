@@ -159,14 +159,6 @@ void ProbeFrame(void)
 
 static HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9 *dev, const RECT *src, const RECT *dst, HWND wnd, const RGNDATA *dirty)
 {
-    if (g_trace_skip && g_skip_first_tick && GetTickCount() - g_skip_first_tick < 4000) {
-        char buf[160];
-
-        snprintf(buf, sizeof buf, "present +%lu ms black %d wipe %.3f dir %.3f style %02x pend %d/%d be0 %d",
-                 GetTickCount() - g_skip_first_tick, g_cutscene_skipping, *(float *)0x950780, *(float *)0x950784,
-                 *(uint8_t *)0x95077C, *(int *)0x87658C, *(int *)0x951B80 != 0, *(int *)0x951BE0);
-        Log(buf);
-    }
     if (g_skip_fade > 0.001f)
         DrawFadeOverlay(dev, g_skip_fade);
     if (g_probe_consts)

@@ -27,7 +27,8 @@
 #define ADDR_SLOT_ASSIGNED 0x0297E048u  /* dword_297E048[3 * slot]: slot has a device */
 #define ADDR_PLAYER_OBJ    0x0093D7F0u  /* dword_93D7F0[slot]: player object */
 #define PLAYER_ACTIVE_OFS  508          /* *(char *)(player + 508) < 0: slot is playing */
-#define DETECT_KINDS       0x1A
+#define DETECT_KINDS       0x1A   /* what the game's own press-any-button scans check: buttons and keys */
+#define DETECT_KINDS_ANALOG 0x01  /* gamepad sticks and triggers: sub_6D9120 only looks at them when this bit is set */
 #define DEVICE_COUNT       14
 #define FIRST_KEYBOARD_DEVICE 10   /* raw/mapped ids 0-9 are gamepads, 10-13 keyboard layouts */
 #define ADDR_TITLES_LEVEL  0x00951B88u  /* dword_951B88: "titles" level entry */

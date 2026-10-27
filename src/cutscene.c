@@ -1,22 +1,17 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * Cutscene skip: Start finishes the running cutscene parts and hides the transition.
+ * Cutscene skip: Start brings the running cutscene to its end. The game ends it itself, at normal speed, so its own
+ * ending (what follows the cutscene, the transition) runs as after a cutscene played to the end.
  */
 #include "all.h"
 
 int g_skip_cutscenes = 1;
 
-int g_trace_skip;
-
-DWORD g_skip_done_tick, g_skip_first_tick;
-
-int g_cutscene_skipping;
-
 /*
- * Fades around a skip. The picture fades to black while the cutscene still plays (FADE_OUT_MS), the skip then runs
- * hidden behind black, and gameplay fades in from black (FADE_IN_MS). g_skip_fade (0 = clear, 1 = black) is drawn over
- * the frame by the Present hook. A stock Start press does nothing in a cutscene, so letting the game run during the
- * fade-out is safe.
+ * Fades around a skip. The picture fades to black while the cutscene still plays (FADE_OUT_MS), the skip then ends the
+ * cutscene behind black, and gameplay fades in from black (FADE_IN_MS). g_skip_fade (0 = clear, 1 = black) is drawn
+ * over the frame by the Present hook. A stock Start press does nothing in a cutscene, so letting the game run during
+ * the fade-out is safe.
  */
 #define FADE_OUT_MS 250
 #define FADE_IN_MS  350
@@ -25,27 +20,22 @@ float g_skip_fade;
 static DWORD g_fade_out_since;   /* tick count when the fade-out started, 0 = not fading out */
 static DWORD g_fade_in_since;
 static int g_was_black;
+static int g_skipping;           /* the cutscene is being ended; the screen stays black until it is over */
 
 /*
  * Pressing Start during a cutscene skips it: every playing cutscene animation (dword_951C3C[],
- * count dword_951C80) is moved to its last moment, so the game's own end-of-cutscene handling
- * (fade, returning control, loading the next level) runs on the next update.
+ * count dword_951C80) is moved to just before its last moment, so the game's own end-of-cutscene handling
+ * (placing the actors, the completion callback, returning control, loading the next level) runs on the next updates.
  */
 #define ADDR_START_MASK      0x00802274u  /* dword_802274: the Start button bit in a slot's button mask */
 
 #define ADDR_CUTSCENE_ACTIVE 0x00951BE0u  /* dword_951BE0: a cutscene is playing */
-
-#define ADDR_CUTSCENE_ANIMS  0x00951C3Cu  /* dword_951C3C[4]: playing cutscene animations */
-
-#define ADDR_CUTSCENE_COUNT  0x00951C80u
 
 #define ADDR_CUTSCENE_INSTANCE 0x00951BE8u  /* dword_951BE8: the running cutscene instance, +4 = its animation */
 
 #define ANIM_FLAGS_OFS       136
 
 #define ANIM_FINISHED        0x1000u
-
-static DWORD g_skip_tick;
 
 #define GAME_CUTSCENE_LIST_OFS 10928  /* game + 10928: { instance array, count } of the level's cutscene instances */
 
@@ -65,77 +55,80 @@ static int StartPressed(void)
     return dev >= 0 && dev < FIRST_KEYBOARD_DEVICE && code == g_start_button;
 }
 
-/* Mark every playing cutscene animation of the level as finished. */
-static int FinishCutsceneAnims(int game)
+/*
+ * Bring a playing cutscene animation close to the end of its timeline. The animation update (sub_508340) then ends it
+ * the way it does at the end of a normal play: it runs the animation's completion callback (+180, one shot), stops it
+ * and lets the cutscene code run its own ending. The earlier "mark it finished" shortcut skipped the callback, which is
+ * what the game uses for things that follow a cutscene, so the skipped cutscene could be played again from its trigger
+ * box.
+ *
+ * The actors (the characters, a character that joins the party) are placed by the update steps that do not end the
+ * animation; the step that ends it does not place them. So the time stops a step and a half short of the end: the
+ * next step places everything where the cutscene leaves it, the one after ends the animation.
+ */
+#define ANIM_TIME_OFS        144
+#define ANIM_DATA_OFS        88    /* the animation's data; +8 = its length */
+#define ANIM_STEP_OFS        152   /* animation time added per update (speed * frame time) */
+
+static void JumpToEnd(uint8_t *anim)
+{
+    uint8_t *data = *(uint8_t **)(anim + ANIM_DATA_OFS);
+    float last = data ? *(float *)(data + 8) - 1.0f : 0.0f;
+    float target = last - 1.5f * *(float *)(anim + ANIM_STEP_OFS);
+
+    if (last > 1.0f && target > 0.0f && *(float *)(anim + ANIM_TIME_OFS) < target)
+        *(float *)(anim + ANIM_TIME_OFS) = target;
+}
+
+/*
+ * Bring every playing cutscene animation of the level to its end. When a step did not end them (force: an animation
+ * that never reaches the end by itself, a looping one) they are marked finished instead.
+ */
+static int FinishCutsceneAnims(int game, int force)
 {
     int **list = game ? *(int ***)(game + GAME_CUTSCENE_LIST_OFS) : NULL;
     int n, i, marked = 0;
-    uint8_t *anim;
+    uint8_t *inst, *anim;
 
     if (list && list[0] && (int)list[1] > 0 && (int)list[1] < 64) {
         n = (int)list[1];
         for (i = 0; i < n; i++) {
-            uint8_t *inst = (uint8_t *)list[0][i];
-
+            inst = (uint8_t *)list[0][i];
             anim = inst ? *(uint8_t **)(inst + 4) : NULL;
             if (anim && (*(uint32_t *)(anim + ANIM_FLAGS_OFS) & 2)) {
-                *(uint32_t *)(anim + ANIM_FLAGS_OFS) |= ANIM_FINISHED;
+                JumpToEnd(anim);
+                if (force)
+                    *(uint32_t *)(anim + ANIM_FLAGS_OFS) |= ANIM_FINISHED;
                 marked++;
             }
         }
     }
-    {
-        uint8_t *inst = *(uint8_t **)ADDR_CUTSCENE_INSTANCE;
-
-        anim = inst ? *(uint8_t **)(inst + 4) : NULL;
-        if (anim) {
+    inst = *(uint8_t **)ADDR_CUTSCENE_INSTANCE;
+    anim = inst ? *(uint8_t **)(inst + 4) : NULL;
+    if (anim) {
+        JumpToEnd(anim);
+        if (force)
             *(uint32_t *)(anim + ANIM_FLAGS_OFS) |= ANIM_FINISHED;
-            marked++;
-        }
+        marked++;
     }
     return marked;
 }
 
-static void LogCutsceneState(const char *tag)
-{
-    uint8_t *inst = *(uint8_t **)ADDR_CUTSCENE_INSTANCE;
-    uint8_t *anim = inst ? *(uint8_t **)(inst + 4) : NULL;
-
-    char buf[300];
-
-    snprintf(buf, sizeof buf, "cutscene %s: inst %p flags %08x next %d str '%.20s' | anim flags %08x time %.2f step %.3f | hold %d snd %d count %d",
-        tag, inst, inst ? *(uint32_t *)(inst + 80) : 0, inst ? *(short *)(inst + 236) : -9,
-        inst ? (char *)(inst + 244) : "",
-        anim ? *(uint32_t *)(anim + ANIM_FLAGS_OFS) : 0, anim ? *(float *)(anim + 144) : 0.f,
-        anim ? *(float *)(anim + 152) : 0.f, *(int *)0x951C58, *(int *)0x803F78,
-        *(int *)ADDR_CUTSCENE_COUNT);
-    Log(buf);
-}
-
-static int g_skip_active; /* a skip is running: FrameHook steps the game until the cutscene is over */
-#define SKIP_IDLE_STEPS 4    /* steps without a cutscene before the skip is over */
-
 /*
- * Start skips the cutscene that is playing, and the parts that follow it straight away (the game
- * is stepped with a black screen until the next part starts), so one press goes to gameplay.
+ * A skip lasts while a cutscene plays and for SKIP_FOLLOW_MS after one ends, so the parts that follow it (each one is
+ * a cutscene of its own) are skipped too: one press goes to gameplay.
  */
-#define SKIP_FOLLOW_MS       3000   /* after a skip, parts starting within this time are skipped too */
-
-#define SKIP_QUIET_MS        200    /* nothing pending and no wipe for this long: no further part follows */
+#define SKIP_FOLLOW_MS       3000
+#define SKIP_QUIET_MS        200    /* nothing playing, pending or wiping for this long: no further part follows */
+#define SKIP_FORCE_MS        250    /* a part that did not end by itself in this time is marked finished */
 
 #define ADDR_WIPE_PROGRESS   0x00950780u  /* flt_950780: screen wipe, 1 = covered, falls to 0 while a scene is wiped in */
-
-#define ADDR_WIPE_SPEED      0x00950784u
-
 #define ADDR_LEVEL_REQUEST   0x0087658Cu
-
 #define ADDR_NEXT_LEVEL      0x00951B80u
-
-static DWORD g_skip_arm_until;
 
 /*
  * The cutscene's music and dialogue are streams of the audio object at 0x924DF8 (two slots). The game stops them with
- * sub_693FD0 (thiscall, one argument) when a level changes; skipping inside a level never did, so the cutscene's sound
+ * sub_693FD0 (thiscall, one argument) when a level changes; g_skipping inside a level never did, so the cutscene's sound
  * went on over the gameplay.
  */
 #define ADDR_AUDIO_OBJECT    0x00924DF8u
@@ -143,119 +136,54 @@ static DWORD g_skip_arm_until;
 
 typedef int (__attribute__((thiscall)) *StopStreamsFn)(void *, int);
 
-static void CutsceneSkip(int cur, int titles)
+static void CutsceneSkip(int game, int cur, int titles)
 {
     static int prev_start;
+    static DWORD busy_since, part_since, quiet_since;
     DWORD now = GetTickCount();
-    int start, edge, active;
+    int start, active;
 
-    g_cutscene_skipping = 0;
     if (!g_skip_cutscenes || !cur || cur == titles) {
-        prev_start = g_skip_active = 0;
-        g_skip_arm_until = 0;
+        prev_start = g_skipping = 0;
         g_fade_out_since = 0;
         return;
     }
     start = StartPressed();
-    edge = start && !prev_start;
-    prev_start = start;
     active = *(int *)ADDR_CUTSCENE_ACTIVE;
-    if (g_skip_arm_until && !g_skip_active && !active) {
-        /*
-         * Between two cutscene parts (or after the last one): the game wipes the next scene in
-         * from black; that is skipped, and once nothing is pending or fading the wait is over.
-         */
-        static DWORD quiet_since;
-        float *wipe = (float *)ADDR_WIPE_PROGRESS;
-        int pending = *(int *)ADDR_LEVEL_REQUEST || *(int *)ADDR_NEXT_LEVEL;
-
-        if (!pending && *wipe > 0.0f && *(float *)ADDR_WIPE_SPEED < 0.0f)
-            *wipe = 0.0f;
-        if (now >= g_skip_arm_until) {
-            g_skip_arm_until = 0;
-        } else if (!pending && *wipe <= 0.0f) {
-            if (!quiet_since)
-                quiet_since = now;
-            if (now - quiet_since > SKIP_QUIET_MS) {
-                g_skip_arm_until = 0;
-                quiet_since = 0;
-            }
-        } else {
-            quiet_since = 0;
-        }
-    }
-    if (edge && !g_skip_active && !g_fade_out_since && active) {
+    if (start && !prev_start && active && !g_skipping && !g_fade_out_since) {
         g_fade_out_since = TickNonZero();
         Log("cutscene skip: fading out");
     }
+    prev_start = start;
+    if (g_fade_out_since && !active)
+        g_fade_out_since = 0;                    /* the cutscene ended by itself meanwhile */
     if (g_fade_out_since && now - g_fade_out_since >= FADE_OUT_MS) {
         g_fade_out_since = 0;
-        if (active) {
-            g_skip_tick = g_skip_first_tick = now;
-            g_skip_active = 1;
-            LogCutsceneState("start");
-            Log("cutscene skipped");
-        }
+        g_skipping = 1;
+        busy_since = now;
+        Log("cutscene skipped");
     }
-    if (active && !g_skip_active && now < g_skip_arm_until) {
-        char buf[80];
-
-        snprintf(buf, sizeof buf, "cutscene skip: part skipped %lu ms after the last one", now - g_skip_done_tick);
-        Log(buf);
-        g_skip_tick = now;
-        g_skip_active = 1;
+    if (!g_skipping)
+        return;
+    if (active) {
+        busy_since = now;
+        quiet_since = 0;
+        if (!part_since)
+            part_since = now;
+        FinishCutsceneAnims(game, now - part_since >= SKIP_FORCE_MS);
+        return;
     }
-    g_cutscene_skipping = g_skip_active;
+    part_since = 0;
+    if (*(int *)ADDR_LEVEL_REQUEST || *(int *)ADDR_NEXT_LEVEL || *(float *)ADDR_WIPE_PROGRESS > 0.0f)
+        quiet_since = 0;
+    else if (!quiet_since)
+        quiet_since = now;
+    if (now - busy_since >= SKIP_FOLLOW_MS || (quiet_since && now - quiet_since >= SKIP_QUIET_MS)) {
+        g_skipping = 0;
+        ((StopStreamsFn)ADDR_STOP_STREAMS)((void *)ADDR_AUDIO_OBJECT, 0);
+        Log("cutscene skip done");
+    }
 }
-
-/*
- * Runs the skip: the game is stepped back to back inside this one frame (no frames are shown)
- * with every playing cutscene animation marked finished, so each shot hands over to the next
- * until the cutscene's own ending has run. It stops the moment the game is out of cutscene mode
- * for a few steps, so gameplay never runs sped up.
- */
-static void RunCutsceneSkip(int game, int *out)
-{
-    float *dt = (float *)ADDR_FRAME_DT, saved = *dt;
-    DWORD t0 = GetTickCount();
-    int k, idle = 0;
-
-    for (k = 0; k < 96 && GetTickCount() - t0 < 300; k++) {
-        if (*(int *)ADDR_CUTSCENE_ACTIVE) {
-            uint8_t *inst = *(uint8_t **)ADDR_CUTSCENE_INSTANCE;
-
-            idle = 0;
-            (void)inst;
-            FinishCutsceneAnims(game);
-            *dt = 0.1f;
-        } else {
-            *dt = saved;
-            idle++;
-        }
-        ((FrameFn)ADDR_FRAME_FUNC)(game, out);
-        if (idle >= SKIP_IDLE_STEPS) {
-            g_skip_active = 0;
-            g_skip_done_tick = GetTickCount();
-            g_skip_arm_until = g_skip_done_tick + SKIP_FOLLOW_MS;
-            ((StopStreamsFn)ADDR_STOP_STREAMS)((void *)ADDR_AUDIO_OBJECT, 0);
-            {
-                char buf[64];
-
-                snprintf(buf, sizeof buf, "cutscene skip done (after %d steps)", k);
-                Log(buf);
-            }
-            break;
-        }
-    }
-    *dt = saved;
-    if (g_skip_active && GetTickCount() - g_skip_tick > 3000) {
-        g_skip_active = 0;
-        LogCutsceneState("gave up");
-        Log("cutscene skip gave up");
-    }
-    g_cutscene_skipping = g_skip_active || GetTickCount() < g_skip_arm_until;
-}
-static void CutsceneFrameInner(int game, int *out, int cur, int titles);
 
 static void UpdateFade(void)
 {
@@ -265,7 +193,7 @@ static void UpdateFade(void)
         g_skip_fade = (float)(now - g_fade_out_since) / FADE_OUT_MS;
         if (g_skip_fade > 1.0f)
             g_skip_fade = 1.0f;
-    } else if (g_cutscene_skipping) {
+    } else if (g_skipping) {
         g_skip_fade = 1.0f;
         g_was_black = 1;
         g_fade_in_since = 0;
@@ -286,23 +214,10 @@ static void UpdateFade(void)
     }
 }
 
-/* Runs one game frame, or the cutscene skip in its place. */
+/* Runs one game frame, after the skip has moved the cutscene towards its end. */
 void CutsceneFrame(int game, int *out, int cur, int titles)
 {
-    CutsceneFrameInner(game, out, cur, titles);
+    CutsceneSkip(game, cur, titles);
+    FramerateGameFrame(game, out);
     UpdateFade();
-}
-
-static void CutsceneFrameInner(int game, int *out, int cur, int titles)
-{
-    CutsceneSkip(cur, titles);
-    if (g_skip_active) {
-        RunCutsceneSkip(game, out);
-    } else if (g_skip_arm_until && GetTickCount() < g_skip_arm_until && !*(int *)ADDR_CUTSCENE_ACTIVE) {
-        /* the next part of the cutscene is loading: it must not be shown */
-        ((FrameFn)ADDR_FRAME_FUNC)(game, out);
-        g_cutscene_skipping = 1;
-    } else {
-        FramerateGameFrame(game, out);
-    }
 }

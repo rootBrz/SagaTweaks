@@ -305,7 +305,7 @@ void HotSwitchInput(void)
     ctx = ((InputSaveFn)ADDR_INPUT_SAVE)();
     ((InputSelectFn)ADDR_INPUT_SELECT)(0);
     for (raw = 0; raw < DEVICE_COUNT; raw++) {
-        int found = ((DetectDeviceFn)ADDR_DETECT_DEVICE)((int)pressed, DETECT_KINDS, NULL, NULL, 0);
+        int found = ((DetectDeviceFn)ADDR_DETECT_DEVICE)((int)pressed, DETECT_KINDS | DETECT_KINDS_ANALOG, NULL, NULL, 0);
 
         if (found < 0)
             break;
