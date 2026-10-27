@@ -367,25 +367,62 @@ static int __cdecl EffectsMenuUpdate(int menu)
     return r;
 }
 
-/* "Tweaks" is drawn right before the last row (Quit) of the main menu and the pause menu. */
+/*
+ * "Tweaks" is drawn right before the last row (Quit) of the main menu and the pause menu. Its row
+ * index is taken from the live draw counter, not from the menu's max-row word: the game computes that
+ * word once when the menu opens, but the pause menu's optional "drop out" row comes and goes with the
+ * second player, which would swap the Tweaks and Quit rows.
+ */
+#define MENU_DRAW_ROW_OFS 140   /* dword: row counter of the draw pass, bumped by every row call */
+
+static int g_tweaks_row = -1;
+
+static void NoteTweaksRow(int menu)
+{
+    g_tweaks_row = *(int *)(menu + MENU_DRAW_ROW_OFS);
+}
+
+/* Quit is the last row: keep the cursor range in step with the rows really drawn. */
+static void FitRowRange(int menu)
+{
+    short *row = (short *)(menu + MENU_CUR_ROW_OFS);
+    short last = (short)(*(int *)(menu + MENU_DRAW_ROW_OFS) - 1);
+
+    *(short *)(menu + MENU_MAX_ROW_OFS) = last;
+    if (*row > last) {
+        *row = last;
+        *(int *)(menu + 52) = last;
+    }
+}
+
 static int __cdecl MainQuitRow(int menu, const char *text, int alpha)
 {
+    int r;
+
+    NoteTweaksRow(menu);
     ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, "Tweaks", alpha);     /* same fade as the other rows */
-    return ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, text, alpha);
+    r = ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, text, alpha);
+    FitRowRange(menu);
+    return r;
 }
 
 static int __cdecl PauseQuitRow(int menu, const char *text)
 {
+    int r;
+
+    NoteTweaksRow(menu);
     ((PauseRowFn)ADDR_PAUSE_ROW_DRAW)(menu, "Tweaks");
-    return ((PauseRowFn)ADDR_PAUSE_ROW_DRAW)(menu, text);
+    r = ((PauseRowFn)ADDR_PAUSE_ROW_DRAW)(menu, text);
+    FitRowRange(menu);
+    return r;
 }
 
 static int OpenTweaksRow(int menu)
 {
     int row = *(short *)(menu + MENU_CUR_ROW_OFS);
-    int last = *(short *)(menu + MENU_MAX_ROW_OFS);
 
-    if (row != last - 1 || row <= 0 || !*(int *)(menu + MENU_SELECT_FLAG_OFS) || *(int *)(menu + MENU_BACK_OFS))
+    if (g_tweaks_row <= 0 || row != g_tweaks_row || !*(int *)(menu + MENU_SELECT_FLAG_OFS) ||
+        *(int *)(menu + MENU_BACK_OFS))
         return 0;
     *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
     ((OpenMenuFn)ADDR_OPEN_MENU)(MENU_TWEAKS, 0, -1);
@@ -397,16 +434,16 @@ static int CallShifted(int menu, MenuUpdateFn orig)
 {
     short *row = (short *)(menu + MENU_CUR_ROW_OFS);
     int *row_copy = (int *)(menu + 52);
-    int last = *(short *)(menu + MENU_MAX_ROW_OFS), shifted = last > 1 && *row == last, r;
+    int quit = g_tweaks_row + 1, shifted = g_tweaks_row > 0 && *row == quit, r;
 
     if (shifted) {
-        *row = (short)(last - 1);
-        *row_copy = last - 1;
+        *row = (short)g_tweaks_row;
+        *row_copy = g_tweaks_row;
     }
     r = orig(menu);
-    if (shifted && *row == last - 1) {
-        *row = (short)last;
-        *row_copy = last;
+    if (shifted && *row == g_tweaks_row) {
+        *row = (short)quit;
+        *row_copy = quit;
     }
     return r;
 }
