@@ -2,6 +2,10 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.1.7
+
+- Fixed: with two players, dropping the second player from the pause menu's "drop out" row left the Tweaks and Quit rows swapped: pressing Tweaks opened the Quit confirmation and Quit opened Tweaks. The Tweaks row is now located from the rows that are actually drawn, and the menu's cursor range follows them.
+
 ## 1.1.6
 
 - Fixed: skipping a cutscene in the middle of a level skipped what comes after it. In "Invasion of Naboo" Jar Jar did not join the party after the skipped cutscene, and the same cutscene could be triggered again after going to the next part of the level and back. A skipped cutscene now ends the way a played one does: Start moves it to just before its end and the game ends it itself.
