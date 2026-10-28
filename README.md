@@ -53,7 +53,7 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `LogicHz` | 0 | Most game logic updates per second (0 = every frame). |
 | `FixJumpPhysics` | 1 | Jump impulse corrected to the 60 fps lift and height. |
 
-Debug-only keys (`LogFPS`, `LiveIni` (rereads `LogicHz`, `MaxFPS` and the fix switches once a second), `ProbeSweep` (logs the hero's collision sweeps), `ProbeHero` (one log line per logic update of player 1 near the log of Speeder Showdown: position, velocity, flags, input; read with `tools/audit/trace_jumps.py`), `ProbeConsts`, `DumpTextures`) exist for reverse engineering; see `docs/REVERSING.md`.
+Debug-only keys, all off by default: `LogFPS` (frame rate in the log), `LogInput` (log every change of the input / player state), `LiveIni` (rereads `LogicHz`, `MaxFPS` and the fix switches once a second and logs the changes), `ProbeSweep` (logs the hero's collision sweeps), `ProbeHero` (one log line per logic update of player 1 near the log of Speeder Showdown: position, velocity, flags, input; read with `tools/audit/trace_jumps.py`), `ProbeButtons` (a log line whenever a floor button changes: triggered flag, animation state, hold timer), `ProbeLever` (a line per frame with the crank angle while a lever is held), `ProbeAnim` (per second: how often each animation list is stepped and the sum of the step), `ProbeConsts`, `DumpTextures`. They exist for reverse engineering; see `docs/REVERSING.md`.
 
 ## Build
 

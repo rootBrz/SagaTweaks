@@ -2,6 +2,12 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.2.0
+
+- Fixed: Episode IV "Death Star Escape": the row of five buttons you light with the cart can be completed at high frame rates again. A button now lets go 33 ms after its hold time ends at every frame rate, as it does at 60 fps.
+- Fixed (untested): the zipline, loose LEGO pieces on the ground, the running speed boost, lightsaber clashes and the player's steering after a drop behaved differently at high frame rates. `FixGameplayRates=0` turns these fixes off.
+- Changed: debug logging and the debug keys are off by default.
+
 ## 1.1.7
 
 - Fixed: with two players, dropping the second player from the pause menu's "drop out" row left the Tweaks and Quit rows swapped: pressing Tweaks opened the Quit confirmation and Quit opened Tweaks. The Tweaks row is now located from the rows that are actually drawn, and the menu's cursor range follows them.
