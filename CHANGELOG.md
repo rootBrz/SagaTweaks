@@ -2,6 +2,17 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.2.0
+
+- Fixed: Episode IV "Death Star Escape": the row of five buttons you light with the cart could not be completed at high frame rates (the buttons seemed to stay lit for a shorter time the higher the frame rate was). The game is balanced on a button letting go two game updates after its hold timer ends, about 33 ms at 60 fps but 3 ms at 600 fps, and the cart crosses the row only a few milliseconds faster than the buttons stay lit. The button's release now takes 33 ms at every frame rate (nothing changes at 60 fps).
+- Fixed: the zipline swung wrong at high frame rates (the rope hung far too low). Part of the rope's per-update physics had been scaled and part had not.
+- Fixed: at high frame rates the player's own steering after a fall came out about twice as strong as at 60 fps. A fixed halving of the target speed had been treated as a decay and scaled with the frame rate by mistake.
+- Fixed: loose LEGO pieces on the ground twitched many times more often at high frame rates, and animated objects jittered at the frame rate instead of 60 times a second.
+- Fixed: the running speed boost no longer restarts every time the ground contact blinks for a single update, and the push between two clashing lightsabers no longer grows with the frame rate.
+- Changed: the game's smoothing curves (turning, easing of velocity) follow the response a 60 fps game has per second exactly, also for fast rates, instead of the continuous approximation.
+- Changed: the log no longer records input state changes unless `LogInput=1`; the debug keys are all off by default. New debug keys: `LogInput`, `ProbeButtons`, `ProbeLever`, `ProbeAnim`; `LiveIni` now logs each value it changes. The log starts with the ini values in use.
+- Developer: `docs/AUDIT.md` section 15 describes how the button row and the zipline were found and the rules learned (a `x *= c` is a decay only if `x` survives to the next call; a decay patch needs its source term patched too).
+
 ## 1.1.7
 
 - Fixed: with two players, dropping the second player from the pause menu's "drop out" row left the Tweaks and Quit rows swapped: pressing Tweaks opened the Quit confirmation and Quit opened Tweaks. The Tweaks row is now located from the rows that are actually drawn, and the menu's cursor range follows them.

@@ -29,6 +29,9 @@ int g_fix_physics = 1;
 int g_log_fps;
 int g_probe_sweep;
 int g_probe_hero;
+int g_probe_buttons;
+int g_probe_lever;
+int g_probe_anim;
 int g_fix_gameplay = 1;
 int g_logic_hz;   /* upper bound of game logic updates per second, 0 = every frame */
 int g_live_ini;
@@ -264,10 +267,32 @@ static double g_wall_step = 2.0 / 30.0;
 static float g_arc_kick = 0.2f;          /* flt_8002D0 * scale */
 static double g_rot_m16 = -16.0, g_rot_p16 = 16.0, g_overlay_ms = 33.333335876464844;
 static float g_rope_damp = 0.9f;         /* flt_7FFCA0 ^ scale */
+__attribute__((used)) static float g_release_neg = 0.0f;  /* release threshold of the floor buttons, see ReleaseSlackStub */
+__attribute__((used)) static float g_rope_imp = 1.0f;     /* (1 - g_rope_damp) / (1 - 0.9): see RopeImpulseStub */
 __attribute__((used)) static float g_path_step = 0.0f;   /* flt_7F15DC * g_step_scale */
+__attribute__((used)) static float g_boost_step = 4.0f;    /* 240 * dt, see BoostResetStub */
 __attribute__((used)) static float g_step_scale = 1.0f;    /* min(1, dt*60) of the current logic frame */
 
+
+/* Replacement for sub_54FB40, see above. */
+static double __cdecl Lerp60(float cur, float target, float rate)
+{
+    float dt = *(float *)ADDR_FRAME_DT;
+    float f = dt * rate;
+
+    if (dt < 1.0f / 60.0f && rate > 0.0f) {
+        float base = 1.0f - rate / COUNTER_HZ;
+
+        f = base <= 0.0f ? 1.0f : 1.0f - powf(base, dt * COUNTER_HZ);
+    }
+    if (f > 1.0f)
+        f = 1.0f;
+    return (float)((target - cur) * f + cur);
+}
+
 static void HeroProbe(float dt);
+static void ButtonProbe(int game, float dt);
+static void LeverProbe(float dt);
 
 static void UpdateCollisionTolerance(float dt)
 {
@@ -282,6 +307,7 @@ static void UpdateCollisionTolerance(float dt)
     for (i = 0; i < PUSH_GROUPS; i++)
         g_push[i] = k_push_base[i] * scale;
     g_step_scale = scale;
+    g_boost_step = 240.0f * dt;
     g_path_step = *(const float *)0x007F15DC * scale;
     g_damp75 = pow(0.75, scale);
     g_damp50 = pow(0.5, scale);
@@ -291,6 +317,8 @@ static void UpdateCollisionTolerance(float dt)
     g_rot_p16 = 16.0 * scale;
     g_overlay_ms = 33.333335876464844 * scale;
     g_rope_damp = (float)pow(0.8999999761581421, scale);
+    g_rope_imp = (float)((1.0 - (double)g_rope_damp) / 0.10000000238418579);
+    g_release_neg = (float)(-(2.0 / 60.0) * (1.0 - scale));
 }
 
 /*
@@ -302,7 +330,6 @@ static const struct { uint32_t addr; uint8_t op[2]; uint32_t orig; double *var; 
     { ADDR_DAMP_STEPUP, { 0xDC, 0x0D }, 0x00751AC0u, &g_damp75 },
     { ADDR_DAMP_BOOST,  { 0xDC, 0x0D }, 0x007516D8u, &g_damp50 },
     { ADDR_DAMP_BOOST2, { 0xDC, 0x0D }, 0x007516D8u, &g_damp50 },
-    { ADDR_DAMP_PUSH,   { 0xDD, 0x05 }, 0x007516D8u, &g_damp50 },
 };
 
 static int DampSitesMatch(void)
@@ -318,35 +345,6 @@ static int DampSitesMatch(void)
     }
     return 1;
 }
-
-float __cdecl DecayPow(float x)      /* x^scale, used by the blend stub below */
-{
-    return x <= 0.0f ? 0.0f : powf(x, g_step_scale);
-}
-
-extern void BlendDecayStub(void);
-
-/* Replaces "fsubrp st(1),st / fstp dword [esp+0Ch]" at 4AEB53: stores (1 - blend)^scale instead of 1 - blend. */
-__asm__(
-    ".text\n"
-    ".globl _BlendDecayStub\n"
-    "_BlendDecayStub:\n"
-    "    .byte 0xde,0xe1\n"
-    "    pushfl\n"
-    "    pushl %eax\n"
-    "    pushl %ecx\n"
-    "    pushl %edx\n"
-    "    subl $4,%esp\n"
-    "    fstps (%esp)\n"
-    "    call _DecayPow\n"
-    "    addl $4,%esp\n"
-    "    popl %edx\n"
-    "    popl %ecx\n"
-    "    popl %eax\n"
-    "    popfl\n"
-    "    fstps 0x10(%esp)\n"
-    "    ret\n"
-);
 
 /*
  * sub_59BD40: the timer +3524 (hero pushes against a wall candidate near the ground; at 0.25 the wall-push
@@ -435,6 +433,79 @@ extern void CntM20Stub(void);
 extern void CntP10Stub(void);
 
 /*
+ * Floor buttons (sub_557B90, 0x557FEC): "if (hold timer <= 0) release, else timer -= dt" runs once per call, and the release
+ * only sets the animation speed; the animation step runs before the obstacle class in the frame, so the button leaves the
+ * pressed state two calls after the timer reached zero: 33 ms at 60 fps, 3 ms at 600 fps. The game is balanced on that
+ * lag: the five buttons of the Death Star Escape row, 0.5 units apart, are crossed by the cart (1.8 units/s) in 1.111 s,
+ * the hold is 1.1 s, and only the 33 ms lag makes all five lit at the same time. The release now waits until the timer is
+ * -(2/60)(1 - min(1, 60 dt)) (0 at 60 fps, 33 ms minus the two calls of lag at high rates), mode 2 only, so the lag is
+ * 2/60 s at any rate.
+ */
+static const uint8_t k_release_orig[5] = { 0xD9, 0xEE, 0xD8, 0x5E, 0x40 };
+#define ADDR_RELEASE_CMP 0x00557FECu
+extern void ReleaseSlackStub(void);
+
+/*
+ * Rope / zipline swing (sub_4D6060, 0x4D6DBA..0x4D6DDD): every call the rope offset vector (+68..+76 of the rope) is
+ * multiplied by 0.9 and 0.5 * hero+180 is added to its height: p = 0.9 p + 0.5 h, equilibrium 5 h. Scaling only the 0.9
+ * (above) gave 0.5 h / (1 - 0.9^s), 13 times too much at 850 fps, so the rope hung far too low. The added term must
+ * follow: over s steps of the 60 fps rule the sum is 0.5 h (1 - 0.9^s) / 0.1, so the load of hero+180 is multiplied
+ * by (1 - 0.9^s) / 0.1 (1 at 60 fps).
+ */
+static const uint8_t k_rope_imp_orig[6] = { 0xD9, 0x86, 0xB4, 0x00, 0x00, 0x00 };
+#define ADDR_ROPE_IMP 0x004D6DDDu
+extern void RopeImpulseStub(void);
+
+/*
+ * Loose building-block pieces (GizBuildit, update sub_5912E0 via the class dispatch sub_559CD0): each piece that
+ * is not twitching rolls "random < p" on every call, p = 0.001 to 0.1, and twitches for 0.2 s on success, so the
+ * pieces on the ground twitched about 14 times as often at 850 fps. The roll's random number (call at 0x591F2B) is
+ * replaced by one that always fails on frames without a 60 Hz tick (g_steps), so the roll happens 60 times a second.
+ */
+#define ADDR_BUILDIT_ROLL 0x00591F2Bu
+#define ADDR_RANDOM_FN    0x0054FA60u
+
+/*
+ * sub_5A1480(anim, offset) adds a vector to the current position of an animated object (read the matrix, add, write
+ * it back). sub_468B50 (gizmo class with the "LegShake" animation objects) calls it on every call: a random +-0.025
+ * shake per axis and the stack height, three sites. Per call, so the shake grew with the frame rate. The three calls
+ * now go through ShakeOffset, which makes it once per 60 Hz tick (g_steps times). The other callers (sub_467200,
+ * sub_4688C0, sub_467580) place objects once and are left alone.
+ */
+#define ADDR_SHAKE_FN 0x005A1480u
+static const uintptr_t k_shake_calls[] = { 0x00468CC7, 0x00468FFE, 0x004690CD };
+#define SHAKE_CALLS ((int)(sizeof k_shake_calls / sizeof k_shake_calls[0]))
+
+/*
+ * Speed boost +3448 of sub_4AC620 (a rate multiplier 1..5 on the velocity lerps). It ramps up by 5 per second, but
+ * on every call where the ground gate fails it was set straight back to 1.0, so a ground flag that blips for one
+ * call (1/850 s) threw away what 0.8 s of contact had built. It now drops by 240 per second (a 1/60 s blip still
+ * ends at 1.0, as at 60 fps).
+ * Saber clash push, sub_49FA50: table[+24] * direction is added to the other character's velocity on every call
+ * while the sabers overlap; scaled by the step like the other per-call pushes.
+ */
+static const uint8_t k_boost_orig[8] = { 0xD9, 0xE8, 0xD9, 0x9E, 0x78, 0x0D, 0x00, 0x00 };
+static const uint8_t k_clash1_orig[6] = { 0xD9, 0x41, 0x18, 0x83, 0xC4, 0x08 };
+static const uint8_t k_clash2_orig[7] = { 0xD9, 0x42, 0x18, 0xD8, 0x4C, 0x24, 0x20 };
+#define ADDR_BOOST_RESET 0x004AEE14u
+#define ADDR_CLASH1      0x004A039Au
+#define ADDR_CLASH2      0x004A03B0u
+extern void BoostResetStub(void);
+
+/*
+ * sub_54FB40(cur, target, rate) is the game's smoothing step used by 80 callers (hero velocity, cart/pushblock
+ * momentum, camera ...): cur + (target - cur) * min(1, dt * rate). That explicit Euler step converges faster than
+ * the exponential e^(-rate*t) it approximates, and the more so the larger dt is: 4 % faster at rate 5 and 21 %
+ * faster at rate 20 with dt = 1/60. Everything was tuned at 60 fps, so at 850 fps the hero accelerated visibly
+ * slower (the Death Star Escape cart takes 20 ms longer to get going and misses the 1.1 s window of the five
+ * floor switches by 10 ms). The step now keeps the per-second decay of the 60 fps version: 1 - (1 - rate/60)^(60 dt).
+ */
+static const uint8_t k_lerp_orig[6] = { 0xD9, 0x05, 0x18, 0x50, 0x92, 0x00 };
+#define ADDR_LERP 0x0054FB40u
+extern void Clash1Stub(void);
+extern void Clash2Stub(void);
+
+/*
  * Particle emitter sub_410A10: lifetime counters +268 and +280 drop by one per call and the path position +216 moves
  * by flt_7F15DC per step. The counters drop only on frames with a 60 Hz tick (as many ticks as the original frame
  * would have counted, one at most), the path step shrinks with the frame time.
@@ -463,19 +534,27 @@ static int RateSitesMatch(void)
     for (i = 0; i < 2; i++)
         if (!CallSiteOk(k_rate_calls[i], ADDR_TRUNC_FN))
             return 0;
-    return Matches(ADDR_EMIT_DEC, k_emit_dec_orig, sizeof k_emit_dec_orig) &&
+    return CallSiteOk(ADDR_BUILDIT_ROLL, ADDR_RANDOM_FN) &&
+           CallSiteOk(k_shake_calls[0], ADDR_SHAKE_FN) && CallSiteOk(k_shake_calls[1], ADDR_SHAKE_FN) &&
+           CallSiteOk(k_shake_calls[2], ADDR_SHAKE_FN) &&
+           Matches(ADDR_EMIT_DEC, k_emit_dec_orig, sizeof k_emit_dec_orig) &&
            Matches(ADDR_EMIT_LIFE, k_emit_life_orig, sizeof k_emit_life_orig) &&
            Matches(ADDR_EMIT_PATH, k_emit_path_orig, sizeof k_emit_path_orig) &&
            Matches(ADDR_CNT4231, k_cnt4231_orig, sizeof k_cnt4231_orig) &&
            Matches(ADDR_CNT_M10, k_cnt_m10_orig, sizeof k_cnt_m10_orig) &&
            Matches(ADDR_CNT_M20, k_cnt_m20_orig, sizeof k_cnt_m20_orig) &&
            Matches(ADDR_CNT_P10, k_cnt_p10_orig, sizeof k_cnt_p10_orig) &&
+           Matches(ADDR_ROPE_IMP, k_rope_imp_orig, sizeof k_rope_imp_orig) &&
+           Matches(ADDR_RELEASE_CMP, k_release_orig, sizeof k_release_orig) &&
            Matches(ADDR_KNOCKBACK_AMOUNT, k_knock_orig, sizeof k_knock_orig) &&
-           Matches(ADDR_OBJPUSH_AMOUNT, k_push_orig, sizeof k_push_orig);
+           Matches(ADDR_OBJPUSH_AMOUNT, k_push_orig, sizeof k_push_orig) &&
+           Matches(ADDR_BOOST_RESET, k_boost_orig, sizeof k_boost_orig) &&
+           Matches(ADDR_CLASH1, k_clash1_orig, sizeof k_clash1_orig) &&
+           Matches(ADDR_CLASH2, k_clash2_orig, sizeof k_clash2_orig) &&
+           Matches(ADDR_LERP, k_lerp_orig, sizeof k_lerp_orig);
 }
 
 static const uint8_t k_approach_orig[7] = { 0x51, 0xD9, 0x05, 0x18, 0x50, 0x92, 0x00 };
-static const uint8_t k_blend_orig[6] = { 0xDE, 0xE1, 0xD9, 0x5C, 0x24, 0x0C };
 
 static int PatchCallPad(uintptr_t addr, const void *fn, size_t len)
 {
@@ -517,15 +596,22 @@ int __cdecl DitherTruncate(double x)
 
 /*
  * sub_550070(from, to, rate): moves a 16-bit angle toward the target by (to - from) * min(1, dt * rate) and
- * returns the result as an integer. The original truncates, so with small steps a positive delta never
+ * returns the result as an integer (the step fraction matches the 60 fps response per second, see below). The original truncates, so with small steps a positive delta never
  * moves (it stalls up to 1 / (dt * rate) units short) and a negative delta always moves a whole unit. Same
  * rounding as above: the mean step is exact.
  */
 static short __cdecl Approach(unsigned from, unsigned to, float rate)
 {
-    float k = *(float *)ADDR_FRAME_DT * rate;
+    float dt = *(float *)ADDR_FRAME_DT, k = dt * rate;
     int a = (int)(from & 0xFFFF), d = (int)(to & 0xFFFF) - a;
 
+    /* At 60 fps the step is the fraction rate/60 of the gap. Below 1/60 s the same response per second is
+     * 1 - (1 - rate/60)^(60 dt); dt * rate alone lags for big rates (a rate of 60 or more snapped at 60 fps). */
+    if (g_fix_gameplay && rate > 0.0f && dt < 1.0f / COUNTER_HZ) {
+        float r = rate / COUNTER_HZ;
+
+        k = r >= 1.0f ? 1.0f : 1.0f - powf(1.0f - r, dt * COUNTER_HZ);
+    }
     if (k > 1.0f)
         k = 1.0f;
     if (d > 0x8000)
@@ -573,6 +659,32 @@ __asm__(
 
 __asm__(
     ".text\n"
+    ".globl _BoostResetStub\n"
+    "_BoostResetStub:\n"
+    "    flds 0xd78(%esi)\n"
+    "    fsubs _g_boost_step\n"
+    "    fstps 0xd78(%esi)\n"
+    "    cmpl $0x3f800000,0xd78(%esi)\n"       /* float compare as int: negative results also sort below 1.0 */
+    "    jge 1f\n"
+    "    movl $0x3f800000,0xd78(%esi)\n"
+    "1:  jmp *_boost_back\n"
+    ".globl _Clash1Stub\n"
+    "_Clash1Stub:\n"
+    "    flds 0x18(%ecx)\n"
+    "    fmuls _g_step_scale\n"
+    "    addl $8,%esp\n"
+    "    jmp *_clash1_back\n"
+    ".globl _Clash2Stub\n"
+    "_Clash2Stub:\n"
+    "    flds 0x18(%edx)\n"
+    "    fmuls _g_step_scale\n"
+    "    fmuls 0x20(%esp)\n"
+    "    jmp *_clash2_back\n"
+);
+__attribute__((used)) static const uintptr_t boost_back = 0x4AEE1C, clash1_back = 0x4A03A0, clash2_back = 0x4A03B7;
+
+__asm__(
+    ".text\n"
     ".globl _KnockbackStub\n"
     "_KnockbackStub:\n"
     "    flds 0x20(%esp)\n"
@@ -614,6 +726,20 @@ __asm__(
     ".globl _CntM20Stub\n"
     "_CntM20Stub:\n"
     "    imull $-20,_g_steps,%ecx\n"
+    "    ret\n"
+    ".globl _ReleaseSlackStub\n"
+    "_ReleaseSlackStub:\n"
+    "    flds _g_release_neg\n"
+    "    cmpl $2,%ecx\n"
+    "    je 1f\n"
+    "    fstp %st(0)\n"
+    "    fldz\n"
+    "1:  fcomps 0x40(%esi)\n"
+    "    ret\n"
+    ".globl _RopeImpulseStub\n"
+    "_RopeImpulseStub:\n"
+    "    flds 0xb4(%esi)\n"
+    "    fmuls _g_rope_imp\n"
     "    ret\n"
     ".globl _CntP10Stub\n"
     "_CntP10Stub:\n"
@@ -848,6 +974,22 @@ static int CallSiteOk(uint32_t site, uint32_t fn)
     return b[0] == 0xE8 && (uint32_t)(site + 5 + *(const int32_t *)(b + 1)) == fn;
 }
 
+static void *__cdecl ShakeOffset(int anim, float *offset)
+{
+    void *r = NULL;
+    int i;
+
+    for (i = 0; i < g_steps; i++)
+        r = ((void *(__cdecl *)(int, float *))ADDR_SHAKE_FN)(anim, offset);
+    return r;
+}
+
+/* sub_54FA60 (random 0..65535) for the twitch roll: a number that is never below the chance when there was no tick. */
+static int __cdecl BuilditRoll(void)
+{
+    return g_steps > 0 ? ((int (__cdecl *)(void))ADDR_RANDOM_FN)() : 0x7FFFFFFF;
+}
+
 static int ScriptTickSiteOk(void)
 {
     return CallSiteOk(ADDR_SCRIPT_TICK_CALL, ADDR_SCRIPT_TICK_FN);
@@ -945,6 +1087,47 @@ __asm__(
     "    ret\n"
 );
 
+/*
+ * Debug (ProbeAnim=1): once per second, per animation list handed to sub_5F4B90, how often it was stepped and the sum of
+ * the step argument (dt * 60). A list stepped once per frame with dt*60 shows ~60 per second at any frame rate; more
+ * means it is advanced from more than one place.
+ */
+static const uint8_t k_anim_orig[7] = { 0x83, 0xEC, 0x24, 0x8B, 0x4C, 0x24, 0x28 };
+#define ADDR_ANIM_STEP 0x005F4B90u
+typedef int (__cdecl *AnimFn)(int, float);
+static AnimFn g_anim_orig;
+static struct { int list, calls; double sum; } g_anim_stat[8];
+
+static int __cdecl AnimProbe(int list, float step)
+{
+    static DWORD last;
+    DWORD now = GetTickCount();
+    int i;
+
+    for (i = 0; i < 8 && g_anim_stat[i].list && g_anim_stat[i].list != list; i++)
+        ;
+    if (i < 8) {
+        g_anim_stat[i].list = list;
+        g_anim_stat[i].calls++;
+        g_anim_stat[i].sum += step;
+    }
+    if (!last)
+        last = now;
+    if (now - last >= 1000) {
+        char buf[100];
+
+        for (i = 0; i < 8 && g_anim_stat[i].list; i++) {
+            snprintf(buf, sizeof buf, "A list %x calls %d sum %.1f", g_anim_stat[i].list, g_anim_stat[i].calls,
+                     g_anim_stat[i].sum);
+            Log(buf);
+            g_anim_stat[i].calls = 0;
+            g_anim_stat[i].sum = 0.0;
+        }
+        last = now;
+    }
+    return g_anim_orig(list, step);
+}
+
 int FramerateReady(void)
 {
     return Matches(ADDR_LIMIT_CMP1, k_limit_cmp_orig, sizeof k_limit_cmp_orig) &&
@@ -959,7 +1142,7 @@ int FramerateReady(void)
            CallSiteOk(ADDR_STEPUP_CALL, ADDR_STEPUP_FN) &&
            LimiterCallsOk() && StreakCallsOk() && SparkCallsOk() && CallSiteOk(ADDR_CHAIN_CALL, ADDR_CHAIN_FN) && CallSiteOk(ADDR_STRAND_CALL, ADDR_STRAND_FN) &&
            CallSiteOk(ADDR_SWAY_CALL, ADDR_SWAY_FN) && CallSiteOk(ADDR_WOBBLE_CALL, ADDR_WOBBLE_FN) &&
-           DampSitesMatch() && Matches(ADDR_DAMP_BLEND, k_blend_orig, sizeof k_blend_orig) &&
+           DampSitesMatch() &&
            CallSiteOk(ADDR_HEADING_TRUNC, ADDR_TRUNC_FN) && TruncSitesMatch() && RateSitesMatch() && Matches(ADDR_ANGLE_APPROACH, k_approach_orig, sizeof k_approach_orig) &&
            Matches(ADDR_WALLPUSH_STEP, k_wall_orig, sizeof k_wall_orig) &&
            Matches(ADDR_WIND_TICK, k_wind_orig, sizeof k_wind_orig);
@@ -1005,6 +1188,14 @@ void FramerateInstall(void)
             ok &= PatchPtr(k_push_sites[i].addr + 2, &g_push[k_push_sites[i].group]);
         Log(ok ? "contact response offsets scaled with the step" : "contact response patch FAILED");
     }
+    if (g_probe_anim) {
+        void *tramp = MakeTrampoline(k_anim_orig, sizeof k_anim_orig, ADDR_ANIM_STEP + sizeof k_anim_orig);
+
+        if (tramp && Matches(ADDR_ANIM_STEP, k_anim_orig, sizeof k_anim_orig)) {
+            g_anim_orig = (AnimFn)tramp;
+            Log(PatchJmp(ADDR_ANIM_STEP, AnimProbe, sizeof k_anim_orig) ? "animation probe installed" : "animation probe FAILED");
+        }
+    }
     if (g_probe_sweep) {
         void *tramp = MakeTrampoline(k_sweep_orig, sizeof k_sweep_orig, ADDR_SWEEP_RESUME);
 
@@ -1023,7 +1214,6 @@ void FramerateInstall(void)
 
         for (i = 0; i < sizeof k_damp_sites / sizeof k_damp_sites[0]; i++)
             ok &= PatchPtr(k_damp_sites[i].addr + 2, k_damp_sites[i].var);
-        ok &= PatchCallPad(ADDR_DAMP_BLEND, BlendDecayStub, sizeof k_blend_orig);
         Log(ok ? "per-call hero damping scaled with the step" : "hero damping patch FAILED");
     }
     if (g_fix_gameplay)
@@ -1045,15 +1235,24 @@ void FramerateInstall(void)
             ok &= PatchCall(k_rate_calls[i], ScaledDitherStub);
         ok &= PatchCallPad(ADDR_KNOCKBACK_AMOUNT, KnockbackStub, sizeof k_knock_orig);
         ok &= PatchCallPad(ADDR_OBJPUSH_AMOUNT, ObjPushStub, sizeof k_push_orig);
+        ok &= PatchJmp(ADDR_BOOST_RESET, BoostResetStub, sizeof k_boost_orig);
+        ok &= PatchJmp(ADDR_CLASH1, Clash1Stub, sizeof k_clash1_orig);
+        ok &= PatchJmp(ADDR_CLASH2, Clash2Stub, sizeof k_clash2_orig);
+        ok &= PatchJmp(ADDR_LERP, Lerp60, sizeof k_lerp_orig);
         ok &= PatchJmp(ADDR_EMIT_DEC, EmitDecStub, sizeof k_emit_dec_orig);
         ok &= PatchJmp(ADDR_EMIT_LIFE, EmitLifeStub, sizeof k_emit_life_orig);
         g_path_step = *(const float *)0x007F15DC;   /* never 0 before the first logic frame */
         ok &= PatchPtr(ADDR_EMIT_PATH + 2, &g_path_step);
         ok &= PatchJmp(ADDR_CNT4231, Cnt4231Stub, sizeof k_cnt4231_orig);
+        ok &= PatchCall(ADDR_BUILDIT_ROLL, BuilditRoll);
+        for (i = 0; i < SHAKE_CALLS; i++)
+            ok &= PatchCall(k_shake_calls[i], ShakeOffset);
         ok &= PatchCallPad(ADDR_CNT_M10, CntM10Stub, sizeof k_cnt_m10_orig);
         ok &= PatchCallPad(ADDR_CNT_M20, CntM20Stub, sizeof k_cnt_m20_orig);
         ok &= PatchCallPad(ADDR_CNT_P10, CntP10Stub, sizeof k_cnt_p10_orig);
-        Log(ok ? "lightning, rotation, overlay, rope, knockback, push and counter rates scaled" : "rate patch FAILED");
+        ok &= PatchCallPad(ADDR_ROPE_IMP, RopeImpulseStub, sizeof k_rope_imp_orig);
+        ok &= PatchCallPad(ADDR_RELEASE_CMP, ReleaseSlackStub, sizeof k_release_orig);
+        Log(ok ? "lightning, rotation, overlay, rope, knockback, push, saber clash, speed boost, smoothing step, counter, building-block twitch, object shake, rope and button release rates scaled" : "rate patch FAILED");
     }
     Log(PatchJmp(ADDR_ANGLE_APPROACH, Approach, 7) ? "angle smoothing rounding fixed" : "angle smoothing patch FAILED");
     Log(PatchCall(ADDR_HEADING_TRUNC, DitherStub) ? "heading step rounding fixed" : "heading step patch FAILED");
@@ -1138,9 +1337,96 @@ void FramerateGameFrame(int game, int *out)
     if (g_fix_physics)
         JumpFix(*dt);
     ((FrameFn)ADDR_FRAME_FUNC)(game, out);
+    if (g_probe_buttons)
+        ButtonProbe(game, *dt);
+    if (g_probe_lever)
+        LeverProbe(*dt);
     if (g_probe_hero)
         HeroProbe(*dt);
     *dt = saved;
+}
+
+
+/*
+ * Debug (ProbeButtons=1): obstacle records (160 bytes, list of the current group at game+10952) of type 2 and 6 (buttons).
+ * A line whenever one changes: triggered flag +152, animation state (*(+52)+12: 0 up, 1 pressing, 2 down, 3 releasing),
+ * hold timer +64 of +60, trigger object +56, flags +156.
+ */
+#define BTN_MAX 64
+static struct { int trig, state, zero; uint32_t fl; } g_btn_last[BTN_MAX];
+
+static void ButtonProbe(int game, float dt)
+{
+    static int lines;
+    static double t;
+    int **head = *(int ***)(game + 10952);
+    char *grp;
+    int n, i;
+    int **list;
+
+    t += dt;
+    if (!head || !*head || lines >= 20000)
+        return;
+    grp = (char *)*head + 20 * *(int *)0x802644;
+    n = *(int *)(grp + 4);
+    list = *(int ***)(grp + 12);
+    if (!list)
+        return;
+    for (i = 0; i < n && i < BTN_MAX; i++) {
+        char *r = (char *)list[2 * i];
+        char type, trig, state, zero;
+        uint32_t fl;
+        char buf[300];
+
+        if (!r)
+            continue;
+        type = r[145];
+        if (type != 2 && type != 6)
+            continue;
+        trig = *(int *)(r + 152) != 0;
+        state = *(int *)(r + 52) ? (char)*(int *)(*(int *)(r + 52) + 12) : -1;
+        zero = *(float *)(r + 64) <= 0.0f;
+        fl = *(uint32_t *)(r + 156) & 0xFF;
+        if (g_btn_last[i].trig == trig && g_btn_last[i].state == state && g_btn_last[i].zero == zero && g_btn_last[i].fl == fl)
+            continue;
+        g_btn_last[i].trig = trig;
+        g_btn_last[i].state = state;
+        g_btn_last[i].zero = zero;
+        g_btn_last[i].fl = fl;
+        char *hero = (char *)*(int *)ADDR_PLAYER_OBJ;
+
+        snprintf(buf, sizeof buf, "B %.4f dt %.5f #%d at %.2f %.2f trig %d state %d timer %.3f/%.3f fl %x obj %x | hero f641 %d f638 %d f508 %x st %d",
+                 t, dt, i, *(float *)(r + 28), *(float *)(r + 36), trig, state, *(float *)(r + 64), *(float *)(r + 60),
+                 fl, *(unsigned *)(r + 56), hero ? hero[641] : -1, hero ? *(short *)(hero + 638) : -1,
+                 hero ? *(unsigned *)(hero + 508) : 0, hero ? hero[1973] : -1);
+        Log(buf);
+        lines++;
+    }
+}
+
+/*
+ * Debug (ProbeLever=1): while player 1 is in the lever state (id in dword 0x802850) a line per frame with the crank
+ * angle of the object (+124, 65536 per turn), its previous angle +128, flags +132 and the hero's grip state.
+ */
+static void LeverProbe(float dt)
+{
+    static int lines;
+    static double t;
+    char *hero = (char *)*(int *)ADDR_PLAYER_OBJ;
+    int state = *(int *)0x00802850;
+    char *obj;
+    char buf[160];
+
+    t += dt;
+    if (!hero || state == -1 || (signed char)hero[1973] != state || lines >= 6000)
+        return;
+    obj = (char *)*(int *)(hero + 1944);
+    if (!obj)
+        return;
+    snprintf(buf, sizeof buf, "L %.4f dt %.5f n %d angle %u prev %u fl %x kind %d", t, dt, g_steps,
+             *(unsigned short *)(obj + 124), *(unsigned short *)(obj + 128), *(unsigned *)(obj + 132), hero[1974]);
+    Log(buf);
+    lines++;
 }
 
 /* Debug (ProbeHero=1): one line per logic frame for player 1: position, velocity, ground flags, input. */
@@ -1169,15 +1455,34 @@ static void HeroProbe(float dt)
 static void LiveIniPoll(void)
 {
     static int frames;
+    static struct { const char *key; int *var; int def; int last; } k_live[] = {
+        { "FixJumpPhysics", &g_fix_physics, 1, 1 },
+        { "FixFrameCounters", &g_fix_counters, 1, 1 },
+        { "LogicHz", &g_logic_hz, 0, 0 },
+        { "FixContactVelocity", &g_fix_contact, 1, 1 },
+        { "MaxFPS", &g_max_fps, 0, 0 },
+    };
+    static int primed;
+    size_t i;
 
+    if (!primed) {            /* the values loaded at start are the baseline */
+        for (i = 0; i < sizeof k_live / sizeof k_live[0]; i++)
+            k_live[i].last = *k_live[i].var;
+        primed = 1;
+    }
     if (++frames < 60)
         return;
     frames = 0;
-    g_fix_physics = GetPrivateProfileIntA("SagaTweaks", "FixJumpPhysics", 1, g_ini_path);
-    g_fix_counters = GetPrivateProfileIntA("SagaTweaks", "FixFrameCounters", 1, g_ini_path);
-    g_logic_hz = GetPrivateProfileIntA("SagaTweaks", "LogicHz", 0, g_ini_path);
-    g_fix_contact = GetPrivateProfileIntA("SagaTweaks", "FixContactVelocity", 1, g_ini_path);
-    g_max_fps = GetPrivateProfileIntA("SagaTweaks", "MaxFPS", 0, g_ini_path);
+    for (i = 0; i < sizeof k_live / sizeof k_live[0]; i++) {
+        *k_live[i].var = GetPrivateProfileIntA("SagaTweaks", k_live[i].key, k_live[i].def, g_ini_path);
+        if (*k_live[i].var != k_live[i].last) {
+            char line[96];
+
+            snprintf(line, sizeof line, "live ini: %s %d -> %d", k_live[i].key, k_live[i].last, *k_live[i].var);
+            Log(line);
+            k_live[i].last = *k_live[i].var;
+        }
+    }
     ApplyMaxFps();
 }
 

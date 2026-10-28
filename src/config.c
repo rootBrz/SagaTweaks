@@ -26,6 +26,7 @@ void ConfigLoad(const char *ini)
     INI_INT(g_fix_physics, "FixJumpPhysics", 1);
     INI_INT(g_logic_hz, "LogicHz", 0);
     INI_INT(g_fix_contact, "FixContactVelocity", 1);
+    INI_INT(g_fix_gameplay, "FixGameplayRates", 1);
     INI_INT(g_prompt_glyphs, "PromptGlyphs", 1);
     all = GetPrivateProfileIntA("SagaTweaks", "ButtonPrompts", 0, ini);
     g_prompt_style[0] = GetPrivateProfileIntA("SagaTweaks", "ButtonPromptsP1", all, ini);
@@ -50,11 +51,25 @@ void ConfigLoad(const char *ini)
 
     /* debugging aids */
     INI_INT(g_log_fps, "LogFPS", 0);
+    INI_INT(g_log_input, "LogInput", 0);
     INI_INT(g_probe_sweep, "ProbeSweep", 0);
     INI_INT(g_probe_hero, "ProbeHero", 0);
-    INI_INT(g_fix_gameplay, "FixGameplayRates", 1);
+    INI_INT(g_probe_buttons, "ProbeButtons", 0);
+    INI_INT(g_probe_lever, "ProbeLever", 0);
+    INI_INT(g_probe_anim, "ProbeAnim", 0);
     INI_INT(g_live_ini, "LiveIni", 0);
     INI_INT(g_probe_consts, "ProbeConsts", 0);
     INI_INT(g_dump_textures, "DumpTextures", 0);
 #undef INI_INT
+
+    {
+        char line[256];
+
+        snprintf(line, sizeof line,
+                 "ini: MaxFPS=%d LogicHz=%d VSync=%d FixFrameCounters=%d FixJumpPhysics=%d FixContactVelocity=%d "
+                 "FixGameplayRates=%d RenderScale=%.2f WindowMode=%d",
+                 g_max_fps, g_logic_hz, g_vsync, g_fix_counters, g_fix_physics, g_fix_contact, g_fix_gameplay,
+                 g_bb_scale, g_window_mode);
+        Log(line);
+    }
 }

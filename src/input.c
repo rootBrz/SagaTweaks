@@ -88,12 +88,16 @@ static int DeviceConnected(int device)
     return *(char *)(ADDR_DEVICE_RECORDS + device * DEVICE_RECORD_SIZE) != 0;
 }
 
-/* Log every change of the input / player state so lost-input reports can be traced. */
+int g_log_input;      /* ini LogInput: log every change of the input / player state */
+
+/* Log every change of the input / player state so lost-input reports can be traced (LogInput=1). */
 static void TraceInputState(void)
 {
     static int last[12], lines;
     int now[12], i, p, same = 1;
 
+    if (!g_log_input)
+        return;
     now[0] = *(int *)ADDR_SLOT_DEVICE;
     now[1] = *(int *)ADDR_SLOT_ASSIGNED;
     now[2] = *(int *)(ADDR_SLOT_DEVICE + 12);

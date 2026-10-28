@@ -76,7 +76,7 @@ Fixed (all in `src/framerate.c`, described in `docs/REVERSING.md`):
 * Collision tolerance fraction, seven absolute push-out constants plus `0.001` in `sub_68F940` (`0x68FE03`), velocity
   rebuild after the sweep, effect timeline, wind phase, and the grass, sway, wobble and chain systems (stepped 60 times
   per second of real time).
-* Per-call decay `0.75` (`sub_68EE40`), `0.5` (`sub_4AB620`, `sub_4AC620`), `1 - blend` (`sub_4AC620`).
+* Per-call decay `0.75` (`sub_68EE40`), `0.5` (`sub_4AB620`, `sub_4AB5A0`). (The `0.5` and `1 - blend` gains of `sub_4AC620` were scaled here until 1.1.7, wrongly, see section 15.4.)
 * Int truncation of angle steps: `sub_550100` (call at `0x550121`) and `sub_550070` (whole function replaced); both
   keep the fraction on average by rounding up with probability equal to it.
 * Wall-push timer of `sub_59BD40` (`0x59BE31`): gained `dt * (2/dt/30)` = 2/30 per call below 30 ms frames, so the
@@ -180,6 +180,14 @@ Third pass, hand-written stubs for amounts computed at run time (same switch `Fi
 
 * Particle emitter `sub_410A10`: lifetime counters `+268` (`0x410A7B`) and `+280` (`0x410A82`) drop only on frames with a
   60 Hz tick; the path step `flt_7F15DC` at `0x410ED5` is scaled by the step.
+* Hit-reaction gate `sub_438230` (`+4227`, accept every 3rd call): left alone. `sub_58E4E0` polls it every call during an
+  overlap, but the saber path may call it once per hit, and a tick-gated counter would drop such hits on frames without a
+  60 Hz tick. Unpatched, the only difference at high fps is a polled hit connecting after 3 calls (3 ms) instead of 50 ms.
+* Camera `sub_40ADE0` re-read for the constant scan (0.5, 0.1, 0.95 hits): fine. Position and angle smoothing are
+  `dt`-proportional (`rate * dt * flt_7F10D4`, `sub_550070` already patched), the ramp `flt_7F10D4` and the transition
+  timers `+444/+452/+456/+95139C` add `dt`; `v238 * 0.5/0.75` and the two-player `* 0.5` act on locals rebuilt every
+  call; `0.1/0.05` are shake amplitudes. Only the free-look camera (case 5, per-call ramp of `flt_7F1128`, `dt` truncated
+  to int) is per-call, and it is entered only through `sub_40AA00(1, ...)`, which nothing calls: dead code.
 * Ledge shimmy `sub_56B8F0` is fine: the value added to `dt * speed` is the length of the hero's displacement this frame
   (square root of the squared sum), which already scales with the frame time. Not a defect.
 
@@ -235,6 +243,8 @@ Found by reading `sub_68EE40` in full and re-reading the old `ProbeHero` traces 
   game does it in one projection. Tried and dropped: running the logic at exactly 60 Hz for 1.2 s after each
   jump (`ExactJumps`, 11 of 11 climbs, steps verified at 1/60 s); the world, camera and enemies step at 60 Hz during
   the window, which was judged not worth it.
+* Resolved (static, section 15.5): the build-start shake of `sub_5912E0` does not accumulate. It reads the rest-pose translation
+  (`sub_5CF9C0`, struct `+48`) and writes the current one (`sub_5EA5D0`, struct `+112`).
 * Fixed since: the FPS limit below the refresh rate (`LimiterRefresh` and `PaceFrame` in `src/framerate.c`: the game's
   limiter takes `max(refresh, limit)` and sleeps whole milliseconds, so 90 gave 97 fps; now exact for every value of the
   Tweaks list) and the audio left over after a cutscene skip (the skip now calls the game's stream stop `sub_693FD0` on
@@ -259,3 +269,81 @@ in `sub_4B1AB0`) and pass the count to `sub_684C90` -> `sub_656DC0` -> `sub_6561
 `flt_8108E4` (the frame time) seconds. The rate already scales with dt and so does the window, so the sparks per second fall
 with dt squared. The three calls go through `SparkRate`, which rolls with at least 1/60 s. Not checked in game (needs a saber
 fight); the other `sub_62C350` callers (about 25) have the same shape and were left alone.
+
+## 15. Findings after 1.1.7 (version 1.2.0)
+
+Two problems were still open after section 14: the Death Star Escape button row could not be completed at high frame rates
+(`LogicHz=60` made it work), and the zipline swung wrongly. They were found by bisecting the game update at run time with a
+temporary "call gate" (removed again in 1.2.0, see the git history of `src/gate.c`): every direct call of `sub_491D50` (and later of
+the obstacle class and its button handler) went through a thunk, and an ini range made the calls in it run only on a 60 Hz tick
+of real time, with the accumulated time as frame time, like `LogicHz=60` does for the whole update. Halving the range found call 67
+(`sub_559CD0`, the update of every gizmo class), then the class (0, `GizObstacle`, update `sub_558070`), and a trace of the button
+states (`ProbeButtons`) showed what the gate was really changing. The method is cheap and finds a fault even when reading does not,
+but read the trace before trusting a gate result: gating a class with the cart changed the *timing* of its logic, not its maths.
+
+### 15.1 Button row: the game is balanced on a two-call release lag (fixed)
+
+Traces of the row (five buttons 0.5 units apart, hold 1.1 s, all five must be down at once). The cart crosses at 1.800 units/s
+(`tgt`, `vel` and measured speed equal, flat from 520 to 715 fps), so the five buttons are pressed over 1.111 s, and each reaches
+state 2 (fully pressed) 0.234 s after the cart enters it, at every frame rate. `sub_557B90` (`0x557FEC`) does "if (timer <= 0)
+release, else timer -= dt" once per call, and the release only sets the animation speed negative: the animation step
+(`sub_5F4B90`, call 37 of `sub_491D50`) runs before the obstacle class (call 67) in a frame, so the button leaves state 2 two calls
+after the timer reached zero: 33 ms at 60 fps, 4 ms at 600 fps (measured), 18 ms with the class on 60 Hz ticks. All five are down
+together only if that lag exceeds about 11 ms: +22 ms margin at 60 fps, -8 ms at 600 fps. That is the forum report ("activation
+time is reduced the higher the frame rate is"). Fix: `ReleaseSlackStub` makes a mode 2 button wait until its timer is
+`-(2/60)(1 - min(1, 60 dt))`, so the lag is 2/60 s at every rate and nothing changes at 60 fps and below (mode 4 keeps 0, its timer
+does not count below 0). Verified on the Deck ("it works").
+
+### 15.2 Zipline (fixed)
+
+`sub_4D6060` updates the rope offset vector (`+68..+76` of the rope) every call as `p = 0.9 p` and `p.y += 0.5 * hero+180`.
+1.1.7 scaled only the `0.9` (`0.9^s`), so the equilibrium `0.5 h / (1 - 0.9^s)` was 67 h instead of 5 h at 850 fps and the rope
+hung far too low. The load of `hero+180` at `0x4D6DDD` now goes through `RopeImpulseStub`, which multiplies it by
+`(1 - 0.9^s) / 0.1` (1 at 60 fps), the exact sum of `s` steps of the 60 fps rule. The `0.5` itself is shared with a position offset
+in the same function and is not touched.
+
+### 15.3 Loose building blocks twitched too often (fixed)
+
+`GizBuildit` (`sub_5912E0`): each loose piece that is not twitching rolls `p > random()` on every call (p = 0.1 minus 0.002 per
+unplaced piece, at least 0.01, times 0.1 unless flag `+122 & 4`) and then twitches for 0.2 s (a timer that does count by `dt`). The
+random number of that roll (call at `0x591F2B`) comes from `BuilditRoll`: the real one on frames with a 60 Hz tick (`g_steps`), a
+number that always fails otherwise. `ShakeOffset` does the same for the three per-call sites of `sub_5A1480` in `sub_468B50` (a
+random +-0.025 jitter of animated objects), so the jitter changes 60 times a second; the other callers of `sub_5A1480` place objects
+once and are not touched.
+
+### 15.4 A wrong patch removed, and the rule (fixed)
+
+`sub_4AC620`, hero state 43 (a fall; `+3639` is the kind of fall), blend `+3480` below 1: `+3864 *= 1 - blend` and, for `+3639` 2 or
+4, `+3864 *= 0.5` (same for `+3872`). The targets are rebuilt on every call before this (default path `sin(heading) * speed`), so
+these are constant gains on a fresh value, not decays. Round 1 reviewers called them "per-call halving" and 1.1.7 scaled them with
+`pow(x, 60 dt)`, which at 850 fps made the 0.5 about 0.99: the hero's own target velocity in that state came out about twice as
+large as at 60 fps. Both patches (`ADDR_DAMP_PUSH`, `ADDR_DAMP_BLEND`) are gone. Rules for this audit: an `x *= c` is a decay only if
+`x` survives to the next call (check the writers of `x`); and a decay patch needs its matching source term patched too (15.2). The
+remaining decay patches are the `+3140` multiplier halving (`sub_4AB620`, `sub_4AB5A0`; set by pads, only decays) and the step-up
+`0.75` of `sub_68EE40` (not verified whether it acts on a fresh or a persistent value).
+
+The smoothing helpers were made exact too: `Lerp60` (`sub_54FB40`) and `Approach` (`sub_550070`) use the fraction
+`1 - (1 - rate/60)^(60 dt)` of the gap per call instead of `rate * dt`, which is what a 60 fps game does per second (the two differ
+for rates above about 30, and a rate of 60 or more snapped at 60 fps).
+
+### 15.5 What was read and found clean
+
+* Object helpers keep a rest pose at struct `+0` (translation `+48`) and the current pose at `+64` (translation `+112`); `sub_5CFA20`
+  returns the struct, `sub_5CF9C0` the rest translation, `sub_5EA570` / `sub_5EA5D0` write the current pose. Shake, twitch and
+  `sub_5A1480` therefore compute "rest pose + offset" every call; they set, they do not accumulate.
+* `sub_558070` (obstacle class): timers by `dt`, animation speed set idempotently (`sub_5A1030`), moving colliders registered in a
+  16-entry table (`sub_58B3B0`, emptied every frame by `sub_58B3A0`) that `sub_58B440` turns into a shove velocity on the hero
+  (`+512/+520`, at most 2 units/s, proportional to penetration), consumed by `sub_4AC620`. Rate independent.
+* Hit gate `sub_438230` (`+4227`, accept every 3rd call): left alone. `sub_58E4E0` polls it every call, the saber path may call
+  it once per hit, and a tick-gated counter would drop such hits.
+* Hero state 43 is the fall state, not the cart; the cart ride (state `-1`, surface 2) uses the animation's authored speed 1.8.
+
+### 15.6 Gizmo class lists
+
+The class table of `sub_559660` is built from one of three getter lists, chosen in the level loader (`0x4CA1F6..0x4CA29A`):
+`sub_46A150` (23 classes) when `dword_876580` is set, `sub_46A340` (28) when `dword_7F39E4` is set, otherwise `sub_46A230` (28).
+Each getter fills a 30-dword descriptor (name, update function at `+24`) from the template at `unk_802728`. The record array is at
+`*(dword_93B268 + 8)`, 156 bytes per class, update function at `+56`, called by `sub_559CD0(game, list, dt)`. Updates seen: GizObstacle
+`sub_558070`, GizBuildit `sub_5912E0`, GizmoPickup `sub_5716C0`, Grapple `sub_54E0C0`, Techno `sub_4CD220`, Tube `sub_56DB80`, ZipUp
+`sub_4D6FD0`, GizTurret `sub_5AC080`, PushBlocks `sub_5A5BD0`, SecurityDoor `sub_4BD280`, Shard `sub_4C0420`, Signal `sub_4C7D30`,
+Attracto `sub_402CE0`; class numbers differ per list, match them by update address.

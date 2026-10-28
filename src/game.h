@@ -224,8 +224,6 @@ typedef int (__attribute__((thiscall)) *ApplyDeviceFn)(void *device, int move_wi
 #define ADDR_DAMP_STEPUP      0x0068F5C5u   /* sub_68EE40: fmul qword 0.75, vertical velocity on a step-up hit  */
 #define ADDR_DAMP_BOOST       0x004AB754u   /* sub_4AB620: fmul qword 0.5, speed multiplier +3140               */
 #define ADDR_DAMP_BOOST2      0x004AB5E1u   /* sub_4AB5A0: same halving of +3140, second copy                    */
-#define ADDR_DAMP_PUSH        0x004AEB87u   /* sub_4AC620: fld qword 0.5, platform terms +3864 and +3872        */
-#define ADDR_DAMP_BLEND       0x004AEB53u   /* sub_4AC620: 1 - blend (+3480) applied to the same two terms      */
 #define ADDR_HEADING_TRUNC    0x00550121u   /* sub_550100: call sub_6E6B90, heading step truncated to int       */
 #define ADDR_TRUNC_FN         0x006E6B90u
 #define ADDR_ANGLE_APPROACH   0x00550070u   /* sub_550070(from, to, rate): angle lerp, result truncated to int  */
