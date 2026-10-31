@@ -61,6 +61,7 @@ void ConfigLoad(const char *ini)
     INI_INT(g_probe_consts, "ProbeConsts", 0);
     INI_INT(g_probe_draw, "ProbeDraw", 0);
     INI_INT(g_fix_title_aspect, "FixTitleAspect", 1);
+    INI_INT(g_fix_aspect, "FixAspect", 1);
     GetPrivateProfileStringA("SagaTweaks", "ForceAspect", "0", buf, sizeof buf, ini);
     g_force_aspect = atof(buf);
     if (g_force_aspect < 1.0 || g_force_aspect > 8.0)

@@ -468,4 +468,6 @@ frame) and every ratio is handled the same way. The row itself is hidden (`src/m
   bars were not wanted); 21:9 / 32:9 rows in the menu (6 patches of the row, redundant once the real ratio is used);
   `dbl_7516A8` (0.8) is a pooled constant with 61 unrelated users, not the HUD scale.
 
+`FixAspect=0` (Tweaks page row, live) makes `CameraAspect` replicate `sub_565470` (aspect 9/16, or 10/16 for setting 2; field of view and text scale as the game has them), `AspectValue` return the game's own ratio, the text hooks and `AspectFrame` do nothing, and the Aspect row drawn again (`AspectRow` in `src/menus.c`; the Video Settings row indices after it shift by one).
+
 `ForceAspect` (ini, debug) replaces the real ratio, class and mode, so the layout of any ratio can be seen on any screen (stretched).

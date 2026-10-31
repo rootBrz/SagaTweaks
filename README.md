@@ -47,6 +47,7 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `RefreshRate` | 0 | Force a refresh rate, 0 = desktop. |
 | `VSync` | 1 | 0 presents without waiting for the display (Video Settings row). |
 | `WindowMode` | 0 | 0 fullscreen, 1 windowed, 2 borderless windowed (Video Settings row). |
+| `FixAspect` | 1 | 0 leaves the game's own aspect ratio handling untouched (the Aspect row of Video Settings comes back). Also a row on the Tweaks page. |
 | `ForceAspect` | 0 | Debug: lay out for this width / height (e.g. 2.37) on any screen; the picture looks stretched on a screen of another shape. |
 | `RenderScale` | 1.0 | Internal resolution multiplier. |
 | `FixFrameCounters` | 1 | Frame-rate independent clocks. |

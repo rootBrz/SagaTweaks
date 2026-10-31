@@ -4,7 +4,7 @@ Each release needs a `## <version>` section here matching `VERSION`. The release
 
 ## Unreleased
 
-- Fixed: the picture, text and HUD follow the real shape of the game window at every ratio. "From Screen Res" and 16:10 drew a 16:9 picture with 16:9-wide text (squeezed on 16:10, stretched on 21:9 such as 2560x1080 or 32:9). 16:9 is the base: the world widens sideways, while the UI (HUD, text, character selector, coin and stud counters) is exactly the 16:9 layout, centered, so nothing is stretched, spread out or overlapping. The Aspect row of Video Settings is removed: the game is kept on From Screen Res, which is what every ratio now needs. `ForceAspect` (debug) lays out for a given ratio on any screen.
+- Fixed: the picture, text and HUD follow the real shape of the game window at every ratio. "From Screen Res" and 16:10 drew a 16:9 picture with 16:9-wide text (squeezed on 16:10, stretched on 21:9 such as 2560x1080 or 32:9). 16:9 is the base: the world widens sideways, while the UI (HUD, text, character selector, coin and stud counters) is exactly the 16:9 layout, centered, so nothing is stretched, spread out or overlapping. The Aspect row of Video Settings is removed: the game is kept on From Screen Res, which is what every ratio now needs. `FixAspect=0` (also a row on the Tweaks page) turns all of it off and brings the Aspect row back. `ForceAspect` (debug) lays out for a given ratio on any screen.
 - Fixed: the title screen's zoom now matches the menu's exactly at every ratio (read from the game's camera instead of a fixed number), so the cut to the main menu no longer jumps.
 
 ## 1.3

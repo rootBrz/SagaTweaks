@@ -41,13 +41,14 @@
 
 #define ORIG_BACK_ROW         4
 
-#define SCALE_ROW             3
+/* Row indices: the stock Aspect row is hidden (FixAspect on) or drawn (off), which moves the rows after it. */
+#define SCALE_ROW             (3 + !g_fix_aspect)
 
-#define WINDOW_ROW            4
+#define WINDOW_ROW            (4 + !g_fix_aspect)
 
-#define VSYNC_ROW             5
+#define VSYNC_ROW             (5 + !g_fix_aspect)
 
-#define BACK_ROW              6
+#define BACK_ROW              (6 + !g_fix_aspect)
 
 #define ADDR_VID_ASPECT_ROW_CALL 0x00512033u  /* call sub_50F740 in sub_511EA0: draws the Aspect row */
 
@@ -146,7 +147,7 @@ static int __cdecl VideoMenuUpdate(int menu)
     if (*(int *)(menu + MENU_BACK_OFS))
         return ((MenuUpdateFn)VID_MENU_UPDATE_ORIG)(menu);
 
-    if (*row == TOGGLE_ROW) {                     /* the stock row after the hidden Aspect row (sub_50EF80, case 3) */
+    if (g_fix_aspect && *row == TOGGLE_ROW) {                     /* the stock row after the hidden Aspect row (sub_50EF80, case 3) */
         if (*(int *)(menu + MENU_LEFT_OFS) || *(int *)(menu + MENU_RIGHT_OFS) || *(int *)(menu + MENU_SELECT_OFS)) {
             if (*(uint8_t *)ADDR_VID_TOGGLE_OK) {
                 *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
@@ -247,6 +248,7 @@ static const TweakOpt k_tweaks[] = {
     { "Input Hot-Switch",            "HotSwitchInput",   &g_hot_switch,    OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
     { "Player 1 Button Prompts",     "ButtonPromptsP1",  &g_prompt_style[0], OPT_NAMED, 0, NULL, 3, NULL, NULL, k_prompt_names },
     { "Player 2 Button Prompts",     "ButtonPromptsP2",  &g_prompt_style[1], OPT_NAMED, 0, NULL, 3, NULL, NULL, k_prompt_names },
+    { "Aspect Ratio Fix",            "FixAspect",        &g_fix_aspect,    OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
     { "FPS Limit",                   "MaxFPS",           &g_max_fps,       OPT_LIST,  0, k_fps_list, 8, "Unlimited", " FPS", NULL },
 };
 
@@ -373,6 +375,12 @@ static int __cdecl HiddenRow(int menu, int text, int alpha)
 {
     (void)menu; (void)text; (void)alpha;
     return 0;
+}
+
+/* The Aspect row of Video Settings: hidden while FixAspect is on (nothing left to choose), the game's own row when it is off. */
+static int __cdecl AspectRow(int menu, int text, int alpha)
+{
+    return g_fix_aspect ? 0 : ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, (const char *)text, alpha);
 }
 
 static int __cdecl EffectsMenuUpdate(int menu)
@@ -537,8 +545,8 @@ void MenusInstall(void)
         PatchCall(ADDR_PAUSE_QUIT_CALL_2, PauseQuitRow) && PatchCall(ADDR_PAUSE_QUIT_CALL_3, PauseQuitRow) ?
         "tweaks row drawn before Quit" : "tweaks row draw hook FAILED");
 
-    /* the Aspect row of Video Settings is gone: the layout follows the screen's shape (src/aspect.c) */
-    Log(PatchCall(ADDR_VID_ASPECT_ROW_CALL, HiddenRow) ? "Aspect row hidden" : "Aspect row hide FAILED");
+    /* the Aspect row of Video Settings is gone while FixAspect is on: the layout follows the screen's shape (src/aspect.c) */
+    Log(PatchCall(ADDR_VID_ASPECT_ROW_CALL, AspectRow) ? "Aspect row hidden" : "Aspect row hide FAILED");
 
     /* FSAA row of Effects Settings is gone */
     Log(PatchCall(ADDR_FX_FSAA_ROW_CALL, HiddenRow) && PatchPtr(ADDR_FX_UPDATE, EffectsMenuUpdate) ?

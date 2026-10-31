@@ -3,6 +3,7 @@
 #include "common.h"
 #include "game.h"
 
+extern int g_fix_aspect;        /* FixAspect: 0 leaves the game's own aspect handling untouched */
 extern double g_force_aspect;   /* ForceAspect: debug, lay out for this ratio on any screen */
 int AspectReady(void);
 void AspectInstall(void);

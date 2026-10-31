@@ -13,6 +13,7 @@
  */
 #include "all.h"
 
+int g_fix_aspect = 1;   /* FixAspect: 0 leaves the game's own aspect handling untouched */
 double g_force_aspect;   /* debug: lay out for this width / height whatever the backbuffer is (ForceAspect) */
 
 #define ADDR_ASPECT_SETTING 0x00826494u   /* dword_826494 */
@@ -34,12 +35,20 @@ double g_force_aspect;   /* debug: lay out for this width / height whatever the 
 #define WIDE_V              0.5625        /* 9 / 16: the camera aspect the widescreen field of view and HUD were made for */
 #define WIDE_MIN            1.4667        /* the game's own boundary between its 4:3 and widescreen layouts */
 
-/* Width / height the picture is laid out for. */
+/* Width / height the picture is laid out for. With FixAspect off: what the game's own setting says (sub_6DF290). */
 double AspectValue(void)
 {
     const int *pp = (const int *)DEV_BACKBUFFER;
     double real = pp[0] > 0 && pp[1] > 0 ? (double)pp[0] / pp[1] : 0.0;
 
+    if (!g_fix_aspect) {
+        switch (*(const int *)ADDR_ASPECT_SETTING) {
+        case 1:  return 16.0 / 9.0;
+        case 2:  return 1.6;
+        case 3:  return *(const float *)DEV_ASPECT_FLOAT;
+        default: return 4.0 / 3.0;
+        }
+    }
     if (g_force_aspect > 0.0)
         return g_force_aspect;
     return real > 1.0 && real < 8.0 ? real : 16.0 / 9.0;
@@ -49,6 +58,8 @@ void AspectFrame(void)
 {
     static const int screen = 3;
 
+    if (!g_fix_aspect)
+        return;
     if (*(const int *)ADDR_ASPECT_SETTING != screen)
         *(int *)ADDR_ASPECT_SETTING = screen;
     if (*(const int *)ADDR_PENDING != screen)
@@ -74,22 +85,29 @@ static void TextScale(float x)
 static void __cdecl CameraAspect(int wide)
 {
     float *cam = (float *)*(uintptr_t *)ADDR_CAMERA_PTR;
-    float v = (float)(1.0 / AspectValue());
     float user = *(const float *)ADDR_FOV_USER;
     int custom = *(const uint8_t *)ADDR_FOV_FLAG != 0;
-    float fov = 0.75f;
+    /* v: camera aspect (height / width); fv: the one the widescreen field of view derives from; text: glyph x scale */
+    float v, fv, text, fov = 0.75f;
 
+    if (g_fix_aspect) {
+        v = (float)(1.0 / AspectValue());
+        fv = WIDE_V;   /* widescreen: the vertical view of 16:9 at every ratio (the view widens or narrows sideways), so the HUD keeps its 16:9 size */
+        text = v / 0.75f;   /* glyph width is in screen-width units: (4/3) / ratio is the same pixels as the 16:9 value 0.75 at 16:9 */
+    } else {   /* sub_565470 as the game has it */
+        v = wide ? (*(const int *)ADDR_ASPECT_SETTING == 2 ? 0.625f : 0.5625f) : 0.75f;
+        fv = v;
+        text = wide ? 0.75f : 1.0f;
+    }
     cam[17] = v;
-    /* widescreen: the vertical view of 16:9 at every ratio (the view widens or narrows sideways), so the HUD keeps its 16:9 size */
     if (wide)
-        fov = custom && user == 0.0f ? WIDE_V : (float)((WIDE_V + 0.75) * 0.5);
+        fov = custom && user == 0.0f ? fv : (float)((fv + 0.75) * 0.5);
     if (custom && user != 0.0f) {
         ((double (__cdecl *)(float))ADDR_FOV_FN)(user);
-        fov = wide ? (float)(user * (WIDE_V / 0.75)) : user;
+        fov = wide ? (float)(user * (fv / 0.75)) : user;
     }
     cam[16] = fov;
-    /* glyph width is in screen-width units: (4/3) / ratio is the same number of pixels as the 16:9 value 0.75 at 16:9 */
-    TextScale(v / 0.75f);
+    TextScale(text);
 }
 
 /*
@@ -100,7 +118,7 @@ static void __cdecl CameraAspect(int wide)
  */
 void __cdecl TextAnchor(float *x)
 {
-    if (*(const uint8_t *)ADDR_WIDE)
+    if (g_fix_aspect && *(const uint8_t *)ADDR_WIDE)
         *x = (float)(*x * (16.0 / 9.0) / AspectValue());
 }
 
@@ -128,7 +146,7 @@ __asm__(
  */
 float __cdecl TextWidth16(void)
 {
-    return (float)(*(const float *)ADDR_TEXT_WIDTH * AspectValue() / (16.0 / 9.0));
+    return (float)(*(const float *)ADDR_TEXT_WIDTH * (g_fix_aspect ? AspectValue() / (16.0 / 9.0) : 1.0));
 }
 
 extern void TextWidthStub(void);
