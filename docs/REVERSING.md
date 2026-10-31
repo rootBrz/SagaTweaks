@@ -434,3 +434,31 @@ The cut to the menu camera (no blend, one frame) changes only the field of view:
 Dead ends: patching the aspect floats found in the heap (`0x59D8748`, `0x59D8754`) or the finished matrices (`0x280D820`,
 `0x2857088`) after the fact only disturbs the characters, the camera is rebuilt from the projection every frame. A centred 4:3
 viewport (first version) also works but leaves black bars and needs a black clear of the target.
+
+## Aspect ratio (unreleased)
+
+The game has one setting, `dword_826494` (0 4:3, 1 16:9, 2 16:10, 3 "From Screen Res"; the Video Settings row is `dword_921D04`,
+the saved key is "Widescreen"). The class `dev + 0x62C` (nearest of 4:3 / 16:9 / 16:10 for the backbuffer, `sub_6E1D00`) and the ratio
+`dev + 0x630` (width / height of the backbuffer) are what setting 3 reads; `byte_8668D7` (widescreen layout) is `class != 0`. Code that
+switches on the setting handles 3 with the real ratio (`sub_6DF290`, `sub_40A520`, the logo fade in `sub_4CA5B0`, Bink videos in
+`sub_631940`, the screenshot in `sub_6E28E0`), so the mod keeps the setting at 3 (`AspectFrame` writes it and the row's value every
+frame) and every ratio is handled the same way. What did not use the ratio:
+
+- `sub_565470(wide)` runs every frame from `sub_492B40` and sets the main camera: aspect `+0x44` (9/16 for any widescreen ratio but
+  16:10 when setting == 2) and field of view `+0x40` (widescreen (aspect + 0.75) / 2 = 0.65625 rad at 16:9), and the glyph x scale
+  `sub_50E6D0(0.75, 1)` (`flt_8015B4`, 0.75 = (4/3) / (16/9)). `CameraAspect` (`src/aspect.c`) replaces it: aspect 1 / ratio, the
+  widescreen field of view of 16:9 at every ratio (so HUD icons keep their 16:9 size and the world widens sideways), glyph scale
+  (4/3) / ratio (the same pixels as 0.75 at 16:9: glyph widths are in screen-width units).
+- HUD icons are placed in camera units at depth 1 (`flt_87B938 * x`, +-1 is the screen side at 16:9) and sized in camera units, so with
+  the 16:9 constants they are the 16:9 layout, centered, on any ratio. Scaling `flt_87B938` (the canvas `flt_7FC3C4/C8` read by
+  `sub_4BADD0`), moving elements to the edges (`HudX`) or changing the field of view all gave gaps between hearts, uneven character
+  selector grids or overlaps: group spacing is in the same units that are scaled. Dropped.
+- Text lines are anchored in screen-width units (x = 0 middle, edges about +-1). Every line goes through `sub_50C780` (79 callers);
+  `TextHook` (entry patch, 10 bytes: `mov eax, 141Ch; call __chkstk`) pulls the x anchor in by (16/9) / ratio, so text keeps its place
+  next to the icons. The coin and stud counters place their icons from the measured text width `flt_921D00` (read at `0x45B847`,
+  `0x45B8CB`, `0x4B81E5`, `0x4B8285`); those reads are scaled back to the 16:9 width (`TextWidth16`), or the icons sit on the digits.
+- Dead ends: a ratio-fitted backbuffer with a letterboxed Present (bilinear stretch at non-integer sizes left dark edges on icons, and
+  bars were not wanted); 21:9 / 32:9 rows in the menu (6 patches of the row, redundant once the real ratio is used);
+  `dbl_7516A8` (0.8) is a pooled constant with 61 unrelated users, not the HUD scale.
+
+`ForceAspect` (ini, debug) replaces the real ratio, class and mode, so the layout of any ratio can be seen on any screen (stretched).

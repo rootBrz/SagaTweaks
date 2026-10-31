@@ -1,0 +1,183 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/*
+ * Aspect ratio: the layout follows the real shape of the backbuffer, whatever it is (4:3, 16:10, 16:9, 21:9, 32:9, a window).
+ *
+ * The game knows one setting, dword_826494: 0 4:3, 1 16:9, 2 16:10, 3 "From Screen Res" (class dev + 0x62C and ratio dev + 0x630
+ * from the backbuffer; every code that switches on the setting handles 3 with the real ratio: sub_6DF290, sub_40A520, the logo
+ * fade, Bink videos). The setting is kept at 3. The pieces that did not use the ratio are replaced:
+ *  - sub_565470 (called every frame, sets the main camera) used 9/16 for every widescreen ratio but 16:10, and the width of every
+ *    glyph (sub_50E6D0) was the 16:9 value 0.75: CameraAspect takes both from AspectValue().
+ * UI (HUD icons, text, character selector) is placed in camera units at a fixed size, which is the same number of pixels at the same
+ * screen height, so with the 16:9 constants (vertical view, text scale) it is exactly the 16:9 layout, centered; only the world
+ * widens. 16:9 is the base at every ratio. A 4:3 screen keeps the game's own 4:3 layout.
+ */
+#include "all.h"
+
+double g_force_aspect;   /* debug: lay out for this width / height whatever the backbuffer is (ForceAspect) */
+
+#define ADDR_ASPECT_SETTING 0x00826494u   /* dword_826494 */
+#define ADDR_ASPECT_MODE    0x0297DBD0u   /* dword_297DBD0: class the menus read */
+#define ADDR_PENDING        0x00921D04u   /* dword_921D04: the Aspect row's value in Video Settings */
+#define DEV_ASPECT_CLASS    (ADDR_DEVICE_OBJECT + 0x62C)   /* 0 4:3, nonzero widescreen */
+#define DEV_ASPECT_FLOAT    (ADDR_DEVICE_OBJECT + 0x630)   /* width / height of the current mode */
+#define DEV_BACKBUFFER      (ADDR_DEVICE_OBJECT + 0x138)   /* present parameters: backbuffer width, height */
+#define ADDR_CAMERA_PTR     0x00925164u
+#define ADDR_FOV_FLAG       0x00921359u
+#define ADDR_FOV_USER       0x00921360u
+#define ADDR_CAMERA_FN      0x00565470u   /* sub_565470(wide) */
+#define ADDR_TEXT_SCALE_FN  0x0050E6D0u   /* sub_50E6D0(x, y): glyph scale */
+#define ADDR_FOV_FN         0x005D6CC0u   /* sub_5D6CC0(float) */
+#define ADDR_WIDE           0x008668D7u   /* byte_8668D7: widescreen layout */
+#define ADDR_TEXT_WIDTH     0x00921D00u   /* flt_921D00: width of the text line just measured */
+#define ADDR_TEXT_FN        0x0050C780u   /* sub_50C780(text, x, y, z, ...): every text line the game draws */
+#define ADDR_CHKSTK         0x006E6D60u
+#define WIDE_V              0.5625        /* 9 / 16: the camera aspect the widescreen field of view and HUD were made for */
+#define WIDE_MIN            1.4667        /* the game's own boundary between its 4:3 and widescreen layouts */
+
+/* Width / height the picture is laid out for. */
+double AspectValue(void)
+{
+    const int *pp = (const int *)DEV_BACKBUFFER;
+    double real = pp[0] > 0 && pp[1] > 0 ? (double)pp[0] / pp[1] : 0.0;
+
+    if (g_force_aspect > 0.0)
+        return g_force_aspect;
+    return real > 1.0 && real < 8.0 ? real : 16.0 / 9.0;
+}
+
+void AspectFrame(void)
+{
+    static const int screen = 3;
+
+    if (*(const int *)ADDR_ASPECT_SETTING != screen)
+        *(int *)ADDR_ASPECT_SETTING = screen;
+    if (*(const int *)ADDR_PENDING != screen)
+        *(int *)ADDR_PENDING = screen;            /* the row shows From Screen Res; it has nothing left to choose */
+    if (g_force_aspect > 0.0) {
+        int wide = g_force_aspect >= WIDE_MIN;
+
+        *(float *)DEV_ASPECT_FLOAT = (float)g_force_aspect;
+        *(int *)DEV_ASPECT_CLASS = wide;
+        *(int *)ADDR_ASPECT_MODE = wide;
+    }
+}
+
+static void TextScale(float x)
+{
+    ((void (__cdecl *)(float, float))ADDR_TEXT_SCALE_FN)(x, 1.0f);
+}
+
+/*
+ * sub_565470 with the ratio taken from AspectValue(). Camera: +0x44 is the y / x scale ratio, +0x40 the field of view in radians.
+ * Widescreen keeps the vertical view of 4:3 shrunk halfway towards the new ratio (the original's (9/16 + 3/4) / 2 at 16:9).
+ */
+static void __cdecl CameraAspect(int wide)
+{
+    float *cam = (float *)*(uintptr_t *)ADDR_CAMERA_PTR;
+    float v = (float)(1.0 / AspectValue());
+    float user = *(const float *)ADDR_FOV_USER;
+    int custom = *(const uint8_t *)ADDR_FOV_FLAG != 0;
+    float fov = 0.75f;
+
+    cam[17] = v;
+    /* widescreen: the vertical view of 16:9 at every ratio (the view widens or narrows sideways), so the HUD keeps its 16:9 size */
+    if (wide)
+        fov = custom && user == 0.0f ? WIDE_V : (float)((WIDE_V + 0.75) * 0.5);
+    if (custom && user != 0.0f) {
+        ((double (__cdecl *)(float))ADDR_FOV_FN)(user);
+        fov = wide ? (float)(user * (WIDE_V / 0.75)) : user;
+    }
+    cam[16] = fov;
+    /* glyph width is in screen-width units: (4/3) / ratio is the same number of pixels as the 16:9 value 0.75 at 16:9 */
+    TextScale(v / 0.75f);
+}
+
+/*
+ * Text is placed in screen-width units (glyph width: CameraAspect's text scale; line anchor: x = 0 is the middle, the edges lie at
+ * about +-1), while the icons next to it are in camera units that the 16:9 constants keep centered: on a wider screen the anchors
+ * would drift away from their icons. Every text line goes through sub_50C780, whose x anchor is pulled in to the 16:9 width (line
+ * contents are laid out from the anchor, so they keep their spacing).
+ */
+void __cdecl TextAnchor(float *x)
+{
+    if (*(const uint8_t *)ADDR_WIDE)
+        *x = (float)(*x * (16.0 / 9.0) / AspectValue());
+}
+
+extern void TextHook(void);
+
+__asm__(
+    ".text\n"
+    ".globl _TextHook\n"
+    "_TextHook:\n"
+    "    leal 8(%esp),%eax\n"
+    "    pushl %eax\n"
+    "    call _TextAnchor\n"
+    "    addl $4,%esp\n"
+    "    movl $0x141C,%eax\n"
+    "    movl $0x006E6D60,%ecx\n"
+    "    call *%ecx\n"
+    "    pushl $0x0050C78A\n"
+    "    ret\n"
+);
+
+/*
+ * The coin / stud counters place their icons from the measured text width (flt_921D00, in the same screen-width units as the glyphs,
+ * so it shrinks with the ratio) in camera units, which do not shrink: the icons would sit on the digits. They read the width at four
+ * places (sub_4B80E0, sub_45B290); each now gets it scaled back to its 16:9 value.
+ */
+float __cdecl TextWidth16(void)
+{
+    return (float)(*(const float *)ADDR_TEXT_WIDTH * AspectValue() / (16.0 / 9.0));
+}
+
+extern void TextWidthStub(void);
+
+__asm__(
+    ".text\n"
+    ".globl _TextWidthStub\n"
+    "_TextWidthStub:\n"
+    "    pushl %eax\n"
+    "    pushl %ecx\n"
+    "    pushl %edx\n"
+    "    call _TextWidth16\n"
+    "    popl %edx\n"
+    "    popl %ecx\n"
+    "    popl %eax\n"
+    "    ret\n"
+);
+
+static const uintptr_t k_width_reads[] = { 0x0045B847u, 0x0045B8CBu, 0x004B81E5u, 0x004B8285u };   /* fld dword [flt_921D00] */
+static const uint8_t k_width_orig[6] = { 0xD9, 0x05, 0x00, 0x1D, 0x92, 0x00 };
+
+static const uint8_t k_text_orig[5] = { 0xB8, 0x1C, 0x14, 0x00, 0x00 };
+
+static int TextReady(void)
+{
+    const uint8_t *b = (const uint8_t *)ADDR_TEXT_FN;
+    int i;
+
+    for (i = 0; i < 4; i++)
+        if (!Matches(k_width_reads[i], k_width_orig, sizeof k_width_orig))
+            return 0;
+
+    return Matches(ADDR_TEXT_FN, k_text_orig, sizeof k_text_orig) && b[5] == 0xE8 &&
+           ADDR_TEXT_FN + 10 + *(const int32_t *)(b + 6) == ADDR_CHKSTK;
+}
+
+static const uint8_t k_camera_orig[8] = { 0x51, 0x83, 0x3D, 0x94, 0x64, 0x82, 0x00, 0x02 };
+
+int AspectReady(void)
+{
+    return TextReady() && Matches(ADDR_CAMERA_FN, k_camera_orig, sizeof k_camera_orig);
+}
+
+void AspectInstall(void)
+{
+    int i, ok = PatchJmp(ADDR_CAMERA_FN, CameraAspect, 5);
+
+    ok &= PatchJmp(ADDR_TEXT_FN, TextHook, 10);
+    for (i = 0; i < 4; i++)
+        ok &= PatchJmp(k_width_reads[i], TextWidthStub, 6) && WritePatch(k_width_reads[i], "\xE8", 1);
+    Log(ok ? "aspect ratio installed" : "aspect ratio install FAILED");
+}

@@ -7,6 +7,7 @@
  *   cutscene.c   skip cutscenes with Start
  *   framerate.c  FPS cap, refresh rate, clock / jump-physics fixes
  *   window.c     VSync and window mode (fullscreen / windowed / borderless)
+ *   aspect.c     camera, text and HUD for any aspect ratio; 21:9 and 32:9 in the Aspect row
  *   render.c     render scale (scaled targets, depth twin, virtual backbuffer), D3D9 hooks
  *   prompts.c    Xbox / PlayStation button glyphs, per player
  *   input.c      keyboard / gamepad hot-switching, Start-only joining, drop-out recovery
@@ -37,6 +38,7 @@ static void __cdecl FrameHook(int game, int *out)
     PromptsFrame();
     FramerateFrame();
     WindowFrame();
+    AspectFrame();
     InputFrame(game);
     RenderFrame(cur, titles);
     CutsceneFrame(game, out, cur, titles);   /* runs the game's own frame (or the cutscene skip) */
@@ -50,7 +52,7 @@ static DWORD WINAPI PatchThread(LPVOID param)
 
     (void)param; /* wait for SteamStub to decrypt .text: the expected bytes must be there */
     for (tries = 0; tries < PATCH_WAIT_TRIES; tries++) {
-        if (StartupReady() && FramerateReady() && WindowReady() && RenderReady() && MenusReady() && InputReady() &&
+        if (StartupReady() && FramerateReady() && WindowReady() && AspectReady() && RenderReady() && MenusReady() && InputReady() &&
             PromptsReady() && Matches(ADDR_FRAME_CALL, k_frame_call_orig, sizeof k_frame_call_orig))
             break;
         Sleep(1);
@@ -63,6 +65,7 @@ static DWORD WINAPI PatchThread(LPVOID param)
     StartupInstall();
     FramerateInstall();
     WindowInstall();
+    AspectInstall();
     RenderInstall();
     MenusInstall();
     InputInstall();

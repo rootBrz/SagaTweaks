@@ -13,6 +13,7 @@ Linux specific.
 | Frame rate | Removes the 85 fps cap, runs at the desktop refresh rate (shown in Video Settings). |
 | Frame-rate fixes | Clock counters, blink timers, grass and foliage animation, collision response and jumps behave as at 60 fps (same jump height, jumps from platforms and over the fallen tree work, at 60 and 1000 fps). |
 | Display | **VSync** and **Window Mode** (fullscreen / windowed / borderless) rows in Video Settings. |
+| Aspect ratio | The picture follows the real shape of the game window (4:3, 16:10, 16:9, 21:9, 32:9, any window), whatever the Aspect row of Video Settings says (it is kept on From Screen Res). 16:9 is the base: the world widens sideways with the screen, while the UI (HUD, text, character selector) is exactly the 16:9 layout, centered, so nothing is stretched, spread out or overlapping. |
 | Render scale | 50-300 % internal resolution, native row in Video Settings. The game itself runs at the larger size (windowed or borderless; the Fullscreen choice is skipped while the scale is not 100 %) and the picture is scaled to the window on present. |
 | FSAA | Row removed from Effects Settings: render scale supersamples the whole frame and replaces it. |
 | Input | Player 1 hot-switches keyboard / gamepad. A second gamepad joins as player 2 with **Start**; lost pads drop out cleanly and never lock the pause menu. |
@@ -46,6 +47,7 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `RefreshRate` | 0 | Force a refresh rate, 0 = desktop. |
 | `VSync` | 1 | 0 presents without waiting for the display (Video Settings row). |
 | `WindowMode` | 0 | 0 fullscreen, 1 windowed, 2 borderless windowed (Video Settings row). |
+| `ForceAspect` | 0 | Debug: lay out for this width / height (e.g. 2.37) on any screen; the picture looks stretched on a screen of another shape. |
 | `RenderScale` | 1.0 | Internal resolution multiplier. |
 | `FixFrameCounters` | 1 | Frame-rate independent clocks. |
 | `FixGameplayRates` | 1 | Fixes the other per-frame rates found by the code audit (see `docs/AUDIT.md`; wobbling levers and hat machine, sparks of cranks, `docs/CLASSES.md`). |

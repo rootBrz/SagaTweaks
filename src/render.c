@@ -332,17 +332,6 @@ static const uintptr_t k_camera_calls[] = { 0x005F6B77u, 0x005F6ED4u, 0x00603B44
 #define ADDR_TITLES_LEVEL 0x00951B88u
 #define ADDR_GAME_PTR     0x00802C54u
 
-/* The aspect the game uses for its menus and levels (sub_6DF290): the "aspect" setting 0 4:3, 1 16:9, 2 16:10, 3 the display's. */
-static double MenuAspect(void)
-{
-    switch (*(const int *)0x00826494u) {
-    case 1:  return 16.0 / 9.0;
-    case 2:  return 1.6;
-    case 3:  return *(const float *)0x02976BF8u;
-    default: return 4.0 / 3.0;
-    }
-}
-
 /*
  * The menu camera's y scale, read from the game: the main camera's projection (sub_5ED540 builds it from the camera
  * struct that CameraAspect fills, and the menu camera is that one) is at flt_80B748 (x scale at [0], y scale at [5]). Until the
@@ -371,7 +360,7 @@ static int __cdecl CameraSet(const void *view, const float *proj)
     int game = *(const int *)ADDR_GAME_PTR;
 
     if (g_fix_title_aspect && proj && game && *(const int *)(game + 296) == *(const int *)ADDR_TITLES_LEVEL &&
-        proj[0] > 0.1f && proj[5] > 0.1f && (aspect = MenuAspect()) > 1.45 && proj[5] / proj[0] < aspect - 0.01) {
+        proj[0] > 0.1f && proj[5] > 0.1f && (aspect = AspectValue()) > 1.45 && proj[5] / proj[0] < aspect - 0.01) {
         memcpy(m, proj, sizeof m);
         if (m[5] > TITLE_FOV_Y - 0.05f && m[5] < TITLE_FOV_Y + 0.05f)
             m[5] = MenuZoom(aspect);
