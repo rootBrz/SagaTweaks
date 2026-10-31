@@ -437,6 +437,10 @@ at the 4:3 values and the menu camera is the live one. `CameraSet` therefore tak
 (fallback: `flt_80B748[5]`, the projection `sub_5ED540` last built), applies it only while the game's widescreen layout flag
 (`byte_8668D7`) is on and the projection was baked narrower than the screen, and sets x from the real ratio (`AspectValue`).
 
+Why it still jumped (measured on the Deck): the title runs with `byte_8668D7` (widescreen layout) = 0, so `sub_565470` gave the live
+camera fov 0.75 (y scale 2.5415) and `CameraSet`, gated on that flag, never fired; opening the menu sets the flag and the fov drops to
+0.6562 (y scale 2.9379), a 1.156 times jump. `CameraAspect` (`src/aspect.c`) now uses the widescreen fov on the titles level too.
+
 Dead ends: patching the aspect floats found in the heap (`0x59D8748`, `0x59D8754`) or the finished matrices (`0x280D820`,
 `0x2857088`) after the fact only disturbs the characters, the camera is rebuilt from the projection every frame. A centred 4:3
 viewport (first version) also works but leaves black bars and needs a black clear of the target.

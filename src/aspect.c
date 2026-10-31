@@ -127,6 +127,13 @@ static void __cdecl CameraAspect(int wide)
         text = wide ? 0.75f : 1.0f;
     }
     cam[17] = v;
+    /* The title ("press any button") runs with the 4:3 layout flag (wide = 0, fov 0.75); the menu then sets wide and the fov drops
+     * to the widescreen one, so the logo jumped 1.156 times bigger. The title takes the widescreen fov too. */
+    if (g_fix_aspect && g_fix_title_aspect && !wide) {
+        int game = *(const int *)0x00802C54u;
+
+        wide = game && *(const int *)(game + GAME_CUR_LEVEL_OFS) == *(const int *)ADDR_TITLES_LEVEL;
+    }
     if (wide)
         fov = custom && user == 0.0f ? fv : (float)((fv + 0.75) * 0.5);
     if (custom && user != 0.0f) {

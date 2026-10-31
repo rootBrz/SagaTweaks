@@ -2,6 +2,10 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.4.1
+
+- Fixed: the title screen still jumped in size when the main menu opened on wide screens.
+
 ## 1.4
 
 - Fixed: wide and narrow screens (16:10, 21:9, 32:9, any window shape). The picture, text and HUD now follow the screen's real shape instead of a fixed 16:9 look: no squeezing or stretching, and the HUD, counters and character selector keep their 16:9 layout. The Aspect row of Video Settings is hidden; "Aspect Ratio Fix" on the Tweaks page (`FixAspect`) turns all of this off.
