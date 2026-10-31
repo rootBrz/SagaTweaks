@@ -266,9 +266,7 @@ static double g_damp50 = 0.5;
 static double g_wall_step = 2.0 / 30.0;
 static float g_arc_kick = 0.2f;          /* flt_8002D0 * scale */
 static double g_rot_m16 = -16.0, g_rot_p16 = 16.0, g_overlay_ms = 33.333335876464844;
-static float g_rope_damp = 0.9f;         /* flt_7FFCA0 ^ scale */
 __attribute__((used)) static float g_release_neg = 0.0f;  /* release threshold of the floor buttons, see ReleaseSlackStub */
-__attribute__((used)) static float g_rope_imp = 1.0f;     /* (1 - g_rope_damp) / (1 - 0.9): see RopeImpulseStub */
 __attribute__((used)) static float g_path_step = 0.0f;   /* flt_7F15DC * g_step_scale */
 __attribute__((used)) static float g_boost_step = 4.0f;    /* 240 * dt, see BoostResetStub */
 __attribute__((used)) static float g_step_scale = 1.0f;    /* min(1, dt*60) of the current logic frame */
@@ -316,8 +314,6 @@ static void UpdateCollisionTolerance(float dt)
     g_rot_m16 = -16.0 * scale;
     g_rot_p16 = 16.0 * scale;
     g_overlay_ms = 33.333335876464844 * scale;
-    g_rope_damp = (float)pow(0.8999999761581421, scale);
-    g_rope_imp = (float)((1.0 - (double)g_rope_damp) / 0.10000000238418579);
     g_release_neg = (float)(-(2.0 / 60.0) * (1.0 - scale));
 }
 
@@ -394,14 +390,12 @@ static int TruncSitesMatch(void)
  *  - 620911 / 620D11: -16 / +16 angle units added every call (sub_620870 / sub_620BF0), followed by an int
  *    conversion that has to keep the fraction (calls 620929 / 620D1E use the scaled dither)
  *  - 631774: overlay timer reduced by 33.33 ms on every call (sub_631440)
- *  - 4D6DBA: rope vector multiplied by flt_7FFCA0 = 0.9 on every call (sub_4D6060)
  */
 static const struct { uint32_t addr; uint8_t op[2]; uint32_t cst; const void *var; } k_rate_sites[] = {
     { 0x4EB408, { 0xD9, 0x05 }, 0x008002D0u, &g_arc_kick },
     { 0x620911, { 0xDD, 0x05 }, 0x0076AEC0u, &g_rot_m16 },
     { 0x620D11, { 0xDD, 0x05 }, 0x00758FB8u, &g_rot_p16 },
     { 0x631774, { 0xDC, 0x25 }, 0x0076B1F0u, &g_overlay_ms },
-    { 0x4D6DBA, { 0xD9, 0x05 }, 0x007FFCA0u, &g_rope_damp },
 };
 #define RATE_SITES ((int)(sizeof k_rate_sites / sizeof k_rate_sites[0]))
 static const uintptr_t k_rate_calls[] = { 0x620929, 0x620D1E };
@@ -447,15 +441,11 @@ static const uint8_t k_release_orig[5] = { 0xD9, 0xEE, 0xD8, 0x5E, 0x40 };
 extern void ReleaseSlackStub(void);
 
 /*
- * Rope / zipline swing (sub_4D6060, 0x4D6DBA..0x4D6DDD): every call the rope offset vector (+68..+76 of the rope) is
- * multiplied by 0.9 and 0.5 * hero+180 is added to its height: p = 0.9 p + 0.5 h, equilibrium 5 h. Scaling only the 0.9
- * (above) gave 0.5 h / (1 - 0.9^s), 13 times too much at 850 fps, so the rope hung far too low. The added term must
- * follow: over s steps of the 60 fps rule the sum is 0.5 h (1 - 0.9^s) / 0.1, so the load of hero+180 is multiplied
- * by (1 - 0.9^s) / 0.1 (1 at 60 fps).
+ * Rope / zipline grab (sub_4D6060, 0x4D6DBA..0x4D6DDD) is deliberately NOT patched: "rope vector = 0.9 * (a - b), height += 0.5 *
+ * hero+180" looks like a per-call decay, but it runs once, when the hero grabs the rope (the state is set to 71 just before, and the
+ * vector is assigned fresh at 0x4D6D8D), so it is the same at every frame rate. Scaling it with the step (1.2.0 to the version
+ * before this fix) changed the rope's rest offset at frame rates above 60 fps and the zipline carried the hero further.
  */
-static const uint8_t k_rope_imp_orig[6] = { 0xD9, 0x86, 0xB4, 0x00, 0x00, 0x00 };
-#define ADDR_ROPE_IMP 0x004D6DDDu
-extern void RopeImpulseStub(void);
 
 /*
  * Loose building-block pieces (GizBuildit, update sub_5912E0 via the class dispatch sub_559CD0): each piece that
@@ -573,7 +563,6 @@ static int RateSitesMatch(void)
            Matches(ADDR_CNT_M10, k_cnt_m10_orig, sizeof k_cnt_m10_orig) &&
            Matches(ADDR_CNT_M20, k_cnt_m20_orig, sizeof k_cnt_m20_orig) &&
            Matches(ADDR_CNT_P10, k_cnt_p10_orig, sizeof k_cnt_p10_orig) &&
-           Matches(ADDR_ROPE_IMP, k_rope_imp_orig, sizeof k_rope_imp_orig) &&
            Matches(ADDR_RELEASE_CMP, k_release_orig, sizeof k_release_orig) &&
            Matches(ADDR_KNOCKBACK_AMOUNT, k_knock_orig, sizeof k_knock_orig) &&
            Matches(ADDR_OBJPUSH_AMOUNT, k_push_orig, sizeof k_push_orig) &&
@@ -764,11 +753,6 @@ __asm__(
     "    fstp %st(0)\n"
     "    fldz\n"
     "1:  fcomps 0x40(%esi)\n"
-    "    ret\n"
-    ".globl _RopeImpulseStub\n"
-    "_RopeImpulseStub:\n"
-    "    flds 0xb4(%esi)\n"
-    "    fmuls _g_rope_imp\n"
     "    ret\n"
     ".globl _CntP10Stub\n"
     "_CntP10Stub:\n"
@@ -1294,9 +1278,8 @@ void FramerateInstall(void)
         ok &= PatchCallPad(ADDR_CNT_M10, CntM10Stub, sizeof k_cnt_m10_orig);
         ok &= PatchCallPad(ADDR_CNT_M20, CntM20Stub, sizeof k_cnt_m20_orig);
         ok &= PatchCallPad(ADDR_CNT_P10, CntP10Stub, sizeof k_cnt_p10_orig);
-        ok &= PatchCallPad(ADDR_ROPE_IMP, RopeImpulseStub, sizeof k_rope_imp_orig);
         ok &= PatchCallPad(ADDR_RELEASE_CMP, ReleaseSlackStub, sizeof k_release_orig);
-        Log(ok ? "lightning, rotation, overlay, rope, knockback, push, saber clash, speed boost, smoothing step, counter, building-block twitch, spinner sparks, lever and hat machine wobble, crank puffs, Force Lightning shake and rumble, ambient sound, object shake, rope and button release rates scaled" : "rate patch FAILED");
+        Log(ok ? "lightning, rotation, overlay, knockback, push, saber clash, speed boost, smoothing step, counter, building-block twitch, spinner sparks, lever and hat machine wobble, crank puffs, Force Lightning shake and rumble, ambient sound, object shake and button release rates scaled" : "rate patch FAILED");
     }
     Log(PatchJmp(ADDR_ANGLE_APPROACH, Approach, 7) ? "angle smoothing rounding fixed" : "angle smoothing patch FAILED");
     Log(PatchCall(ADDR_HEADING_TRUNC, DitherStub) ? "heading step rounding fixed" : "heading step patch FAILED");

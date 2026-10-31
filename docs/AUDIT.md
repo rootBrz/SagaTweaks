@@ -294,13 +294,20 @@ time is reduced the higher the frame rate is"). Fix: `ReleaseSlackStub` makes a 
 `-(2/60)(1 - min(1, 60 dt))`, so the lag is 2/60 s at every rate and nothing changes at 60 fps and below (mode 4 keeps 0, its timer
 does not count below 0). Verified on the Deck ("it works").
 
-### 15.2 Zipline (fixed)
+### 15.2 Zipline (fix withdrawn, see the end of this section)
 
 `sub_4D6060` updates the rope offset vector (`+68..+76` of the rope) every call as `p = 0.9 p` and `p.y += 0.5 * hero+180`.
 1.1.7 scaled only the `0.9` (`0.9^s`), so the equilibrium `0.5 h / (1 - 0.9^s)` was 67 h instead of 5 h at 850 fps and the rope
 hung far too low. The load of `hero+180` at `0x4D6DDD` now goes through `RopeImpulseStub`, which multiplies it by
 `(1 - 0.9^s) / 0.1` (1 at 60 fps), the exact sum of `s` steps of the 60 fps rule. The `0.5` itself is shared with a position offset
 in the same function and is not touched.
+
+**Correction (unreleased).** The block read here as a per-call update is in the grab branch of `sub_4D6060` (hero not yet in state 71;
+the state is set just before and the rope vector is assigned fresh at `0x4D6D8D`): it runs once when the hero grabs the rope, so
+`0.9` and `0.5 * hero+180` are constants at every frame rate. Scaling them (`0.9^s` in 1.1.7, plus `RopeImpulseStub` in 1.2.0) made
+the rest offset depend on the frame time and the zipline carried the hero further than at 60 fps. Both patches are removed; the
+equilibrium `5 h` above was an artefact of reading a one-shot assignment as an iteration. Rule added: before scaling an `x *= c`,
+check that the statement is reached more than once per grab / contact (a state change right before it means it is not).
 
 ### 15.3 Loose building blocks twitched too often (fixed)
 
