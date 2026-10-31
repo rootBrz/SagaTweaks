@@ -343,6 +343,27 @@ static double MenuAspect(void)
     }
 }
 
+/*
+ * The menu camera's y scale, read from the game: the main camera's projection (sub_5ED540 builds it from the camera
+ * struct that CameraAspect fills, and the menu camera is that one) is at flt_80B748 (x scale at [0], y scale at [5]). Until the
+ * game has built it once (or if it looks wrong) the scale is computed from the camera's field of view.
+ */
+#define ADDR_MAIN_PROJECTION 0x0080B748u
+#define ADDR_MAIN_CAMERA_PTR 0x00925164u
+
+static float MenuZoom(double aspect)
+{
+    const float *p = (const float *)ADDR_MAIN_PROJECTION;
+    const float *cam = (const float *)*(const uintptr_t *)ADDR_MAIN_CAMERA_PTR;
+
+    (void)aspect;
+    if (p[5] > 1.5f && p[5] < 8.0f)
+        return p[5];
+    if (cam && cam[16] > 0.1f && cam[16] < 2.0f)
+        return (float)(1.0 / tan(cam[16] * 0.5));
+    return MENU_FOV_Y;
+}
+
 static int __cdecl CameraSet(const void *view, const float *proj)
 {
     float m[16];
@@ -353,7 +374,7 @@ static int __cdecl CameraSet(const void *view, const float *proj)
         proj[0] > 0.1f && proj[5] > 0.1f && (aspect = MenuAspect()) > 1.45 && proj[5] / proj[0] < aspect - 0.01) {
         memcpy(m, proj, sizeof m);
         if (m[5] > TITLE_FOV_Y - 0.05f && m[5] < TITLE_FOV_Y + 0.05f)
-            m[5] = MENU_FOV_Y;
+            m[5] = MenuZoom(aspect);
         m[0] = (float)(m[5] / aspect);
         proj = m;
     }
