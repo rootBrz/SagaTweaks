@@ -431,6 +431,12 @@ The cut to the menu camera (no blend, one frame) changes only the field of view:
 `CameraSet` also replaces the title y scale by the menu one, so the logo is identical before and after. The title scene is shown
 16 % closer than the artists made it. Switch: `FixTitleAspect`.
 
+The menu zoom is not a constant: every camera projection is baked from the main camera struct (`dword_925164`; `sub_5ED540` ->
+`sub_604A80`: y scale = cot(fov / 2) with the field of view at `+0x40`, x scale = y scale * the aspect at `+0x44`), the title camera
+at the 4:3 values and the menu camera is the live one. `CameraSet` therefore takes `1 / tan(cam[16] / 2)` from the live camera
+(fallback: `flt_80B748[5]`, the projection `sub_5ED540` last built), applies it only while the game's widescreen layout flag
+(`byte_8668D7`) is on and the projection was baked narrower than the screen, and sets x from the real ratio (`AspectValue`).
+
 Dead ends: patching the aspect floats found in the heap (`0x59D8748`, `0x59D8754`) or the finished matrices (`0x280D820`,
 `0x2857088`) after the fact only disturbs the characters, the camera is rebuilt from the projection every frame. A centred 4:3
 viewport (first version) also works but leaves black bars and needs a black clear of the target.

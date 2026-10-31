@@ -323,9 +323,6 @@ static void PdFrame(void)
  */
 int g_fix_title_aspect = 1;
 
-/* y scale of the title camera (43 degrees) and of the menu camera of the same level (37.4 degrees): same position, 1.156 times the zoom. */
-#define TITLE_FOV_Y 2.5415f
-#define MENU_FOV_Y  2.9379f
 #define ADDR_CAMERA_SET_FN 0x005FA330u
 static const uintptr_t k_camera_calls[] = { 0x005F6B77u, 0x005F6ED4u, 0x00603B44u };
 #define CAMERA_CALLS ((int)(sizeof k_camera_calls / sizeof k_camera_calls[0]))
@@ -333,38 +330,37 @@ static const uintptr_t k_camera_calls[] = { 0x005F6B77u, 0x005F6ED4u, 0x00603B44
 #define ADDR_GAME_PTR     0x00802C54u
 
 /*
- * The menu camera's y scale, read from the game: the main camera's projection (sub_5ED540 builds it from the camera
- * struct that CameraAspect fills, and the menu camera is that one) is at flt_80B748 (x scale at [0], y scale at [5]). Until the
- * game has built it once (or if it looks wrong) the scale is computed from the camera's field of view.
+ * The menu camera's y scale, read from the game. Every camera projection is baked from the main camera struct (sub_604A80: y scale
+ * = cot(fov / 2) with the field of view at +0x40, x scale = y scale * the aspect at +0x44), and the menu camera is the live one, so
+ * the title camera's zoom is replaced by the live camera's. Its projection (flt_80B748, [5]) is the fallback.
  */
 #define ADDR_MAIN_PROJECTION 0x0080B748u
 #define ADDR_MAIN_CAMERA_PTR 0x00925164u
+#define ADDR_WIDE_LAYOUT     0x008668D7u   /* byte_8668D7: the game's widescreen layout is on */
 
-static float MenuZoom(double aspect)
+static float MenuZoom(void)
 {
-    const float *p = (const float *)ADDR_MAIN_PROJECTION;
     const float *cam = (const float *)*(const uintptr_t *)ADDR_MAIN_CAMERA_PTR;
+    const float *p = (const float *)ADDR_MAIN_PROJECTION;
 
-    (void)aspect;
-    if (p[5] > 1.5f && p[5] < 8.0f)
-        return p[5];
     if (cam && cam[16] > 0.1f && cam[16] < 2.0f)
         return (float)(1.0 / tan(cam[16] * 0.5));
-    return MENU_FOV_Y;
+    return p[5];
 }
 
 static int __cdecl CameraSet(const void *view, const float *proj)
 {
-    float m[16];
+    float m[16], zoom;
     double aspect;
     int game = *(const int *)ADDR_GAME_PTR;
 
+    /* titles level, widescreen layout, a projection baked for a narrower picture than the screen's */
     if (g_fix_title_aspect && proj && game && *(const int *)(game + 296) == *(const int *)ADDR_TITLES_LEVEL &&
-        proj[0] > 0.1f && proj[5] > 0.1f && (aspect = AspectValue()) > 1.45 && proj[5] / proj[0] < aspect - 0.01) {
+        *(const uint8_t *)ADDR_WIDE_LAYOUT && proj[0] > 0.1f && proj[5] > 0.1f && (aspect = AspectValue()) > 1.0 &&
+        proj[5] / proj[0] < aspect - 0.01 && (zoom = MenuZoom()) > 0.1f) {
         memcpy(m, proj, sizeof m);
-        if (m[5] > TITLE_FOV_Y - 0.05f && m[5] < TITLE_FOV_Y + 0.05f)
-            m[5] = MenuZoom(aspect);
-        m[0] = (float)(m[5] / aspect);
+        m[5] = zoom;
+        m[0] = (float)(zoom / aspect);
         proj = m;
     }
     return ((int (__cdecl *)(const void *, const float *))ADDR_CAMERA_SET_FN)(view, proj);
