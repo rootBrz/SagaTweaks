@@ -214,15 +214,17 @@ static int TextReady(void)
  * Flying studs (sprite effects, sub_561400 draws them from sub_4BAE40): a picked-up stud starts at its screen position, stored as a
  * fraction of the screen (record float 40, +-1 at the screen's sides: the log of ProbeEffects shows it fixed for the whole flight) and
  * flies to the counter's icon. The effect is drawn through the HUD mapping (HUD x * flt_87B938), which is the 16:9 one at every ratio,
- * so on a wider screen the start was pulled toward the middle and the stud jumped when it began to fly. The start x is scaled by
+ * so on a wider screen the start was pulled toward the middle and the stud began smaller than the one on the ground (its start size,
+ * float 46, is a fraction of the screen's width too) and then jumped as it flew. The start x and the start size are scaled by
  * ratio / (16/9) once per record (a record whose value the game rewrote is scaled again; one that is unchanged is left alone).
+ * y and z are not: y is a fraction of the screen's height and z is the HUD plane's depth, both independent of the ratio.
  */
 #define ADDR_FX_DRAW 0x00561400u
 static const uintptr_t k_fx_calls[] = { 0x004BB916u, 0x004BBA52u };
 
 static void ScaleEffectStarts(void)
 {
-    static float done[128];   /* the value written back for each record, 0 = not scaled yet */
+    static float done_x[128], done_s[128];   /* the values written back for each record, 0 = not scaled yet */
     double k = AspectValue() / (16.0 / 9.0);
     int i;
 
@@ -232,10 +234,16 @@ static void ScaleEffectStarts(void)
         uint32_t flags = *(const uint32_t *)(b + 216);
 
         if (!b[248] || (flags & 0x20001) != 0x20001) {
-            done[i] = 0.0f;
-        } else if (r[40] != 0.0f && r[40] != done[i]) {
+            done_x[i] = done_s[i] = 0.0f;
+            continue;
+        }
+        if (r[40] != 0.0f && r[40] != done_x[i]) {
             r[40] = (float)(r[40] * k);
-            done[i] = r[40];
+            done_x[i] = r[40];
+        }
+        if (r[46] != 0.0f && r[46] != done_s[i]) {   /* the start size is a fraction of the screen's width as well */
+            r[46] = (float)(r[46] * k);
+            done_s[i] = r[46];
         }
     }
 }
