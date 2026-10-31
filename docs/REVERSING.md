@@ -448,7 +448,8 @@ the saved key is "Widescreen"). The class `dev + 0x62C` (nearest of 4:3 / 16:9 /
 `dev + 0x630` (width / height of the backbuffer) are what setting 3 reads; `byte_8668D7` (widescreen layout) is `class != 0`. Code that
 switches on the setting handles 3 with the real ratio (`sub_6DF290`, `sub_40A520`, the logo fade in `sub_4CA5B0`, Bink videos in
 `sub_631940`, the screenshot in `sub_6E28E0`), so the mod keeps the setting at 3 (`AspectFrame` writes it and the row's value every
-frame) and every ratio is handled the same way. What did not use the ratio:
+frame) and every ratio is handled the same way. The row itself is hidden (`src/menus.c`: the draw call at `0x512033` becomes
+`HiddenRow`, the cursor range follows the rows drawn, and the update wrapper handles the stock toggle row, now index 2, itself). What did not use the ratio:
 
 - `sub_565470(wide)` runs every frame from `sub_492B40` and sets the main camera: aspect `+0x44` (9/16 for any widescreen ratio but
   16:10 when setting == 2) and field of view `+0x40` (widescreen (aspect + 0.75) / 2 = 0.65625 rad at 16:9), and the glyph x scale

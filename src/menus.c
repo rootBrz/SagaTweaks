@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * Menus: Render Scale row in Video Settings, the Tweaks page, hidden FSAA row, and the
+ * Menus: Render Scale row in Video Settings, the Tweaks page, hidden FSAA and Aspect rows, and the
  * Tweaks entry in the main and pause menu.
  */
 #include "all.h"
@@ -10,7 +10,9 @@
  * placed just above the Back / Accept row. The page's draw routine (sub_511EA0) draws its rows with sub_50F740, which
  * also counts them for the cursor range; a call is patched in right before the Back row to draw
  * three more. The rows sit at index 4-6 and push Back to index 7, so the update wrapper handles
- * the new row itself and shows the original update routine Back as row 4 again. Changing the
+ * the new row itself and shows the original update routine Back as row 4 again. The stock Aspect row (index 2) is not drawn
+ * (HiddenRow replaces its draw call, the cursor range follows the rows drawn), so the stock row after it is index 2 and the update
+ * wrapper does what the stock routine would do for it itself. Changing the
  * value resets the device with a new backbuffer size (RenderScaleSet) and stores the choice in the ini.
  */
 #define ADDR_VID_MENU_UPDATE  0x00800D70u  /* menu table entry 0x401, update callback */
@@ -33,13 +35,27 @@
 
 #define MENU_CUR_ROW_OFS      10    /* word */
 
-#define SCALE_ROW             4
+#define TOGGLE_ROW            2     /* the page's last stock row (original index 3); the Aspect row before it is hidden */
 
-#define WINDOW_ROW            5
+#define ORIG_TOGGLE_ROW       3
 
-#define VSYNC_ROW             6
+#define ORIG_BACK_ROW         4
 
-#define BACK_ROW              7
+#define SCALE_ROW             3
+
+#define WINDOW_ROW            4
+
+#define VSYNC_ROW             5
+
+#define BACK_ROW              6
+
+#define ADDR_VID_ASPECT_ROW_CALL 0x00512033u  /* call sub_50F740 in sub_511EA0: draws the Aspect row */
+
+#define ADDR_VID_TOGGLE       0x00921D14u     /* dword_921D14: the toggle row's value */
+
+#define ADDR_VID_TOGGLE_OK    0x008264C9u     /* byte_8264C9: the toggle row can be changed */
+
+#define ADDR_MENU_ERROR_SOUND_ID 0x0080095Cu  /* dword_80095C */
 
 #define MENU_LEFT_OFS         0x5C
 
@@ -130,6 +146,17 @@ static int __cdecl VideoMenuUpdate(int menu)
     if (*(int *)(menu + MENU_BACK_OFS))
         return ((MenuUpdateFn)VID_MENU_UPDATE_ORIG)(menu);
 
+    if (*row == TOGGLE_ROW) {                     /* the stock row after the hidden Aspect row (sub_50EF80, case 3) */
+        if (*(int *)(menu + MENU_LEFT_OFS) || *(int *)(menu + MENU_RIGHT_OFS) || *(int *)(menu + MENU_SELECT_OFS)) {
+            if (*(uint8_t *)ADDR_VID_TOGGLE_OK) {
+                *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
+                *(int *)ADDR_VID_TOGGLE = 1 - *(int *)ADDR_VID_TOGGLE;
+            } else {
+                *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_ERROR_SOUND_ID;
+            }
+        }
+        return 0;
+    }
     if (*row >= SCALE_ROW && *row < BACK_ROW) {
         int step = *(int *)(menu + MENU_RIGHT_OFS) || *(int *)(menu + MENU_SELECT_OFS) ? 1 :
                    *(int *)(menu + MENU_LEFT_OFS) ? -1 : 0;
@@ -143,9 +170,9 @@ static int __cdecl VideoMenuUpdate(int menu)
         return 0;
     }
     if (*row == BACK_ROW) {
-        *row = SCALE_ROW;                         /* the original routine knows Back as row 4 */
+        *row = ORIG_BACK_ROW;                     /* the original routine knows Back as row 4 */
         result = ((MenuUpdateFn)VID_MENU_UPDATE_ORIG)(menu);
-        if (*row == SCALE_ROW)
+        if (*row == ORIG_BACK_ROW)
             *row = BACK_ROW;
         return result;
     }
@@ -485,6 +512,7 @@ int MenusReady(void)
     return Matches(ADDR_TWEAKS_DRAW, (const uint8_t[]){ 0x80, 0x94, 0x50, 0x00 }, 4) &&
            Matches(ADDR_TWEAKS_UPDATE, (const uint8_t[]){ 0x90, 0x94, 0x50, 0x00 }, 4) &&
            Matches(ADDR_FX_FSAA_ROW_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
+           Matches(ADDR_VID_ASPECT_ROW_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
            Matches(ADDR_FX_UPDATE, (const uint8_t[]){ 0xD0, 0xF0, 0x50, 0x00 }, 4) &&
            Matches(ADDR_MAIN_QUIT_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
            Matches(ADDR_PAUSE_QUIT_CALL_1, (const uint8_t[]){ 0xE8 }, 1) &&
@@ -508,6 +536,9 @@ void MenusInstall(void)
     Log(PatchCall(ADDR_MAIN_QUIT_CALL, MainQuitRow) && PatchCall(ADDR_PAUSE_QUIT_CALL_1, PauseQuitRow) &&
         PatchCall(ADDR_PAUSE_QUIT_CALL_2, PauseQuitRow) && PatchCall(ADDR_PAUSE_QUIT_CALL_3, PauseQuitRow) ?
         "tweaks row drawn before Quit" : "tweaks row draw hook FAILED");
+
+    /* the Aspect row of Video Settings is gone: the layout follows the screen's shape (src/aspect.c) */
+    Log(PatchCall(ADDR_VID_ASPECT_ROW_CALL, HiddenRow) ? "Aspect row hidden" : "Aspect row hide FAILED");
 
     /* FSAA row of Effects Settings is gone */
     Log(PatchCall(ADDR_FX_FSAA_ROW_CALL, HiddenRow) && PatchPtr(ADDR_FX_UPDATE, EffectsMenuUpdate) ?

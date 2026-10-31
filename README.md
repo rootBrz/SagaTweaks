@@ -13,7 +13,7 @@ Linux specific.
 | Frame rate | Removes the 85 fps cap, runs at the desktop refresh rate (shown in Video Settings). |
 | Frame-rate fixes | Clock counters, blink timers, grass and foliage animation, collision response and jumps behave as at 60 fps (same jump height, jumps from platforms and over the fallen tree work, at 60 and 1000 fps). |
 | Display | **VSync** and **Window Mode** (fullscreen / windowed / borderless) rows in Video Settings. |
-| Aspect ratio | The picture follows the real shape of the game window (4:3, 16:10, 16:9, 21:9, 32:9, any window), whatever the Aspect row of Video Settings says (it is kept on From Screen Res). 16:9 is the base: the world widens sideways with the screen, while the UI (HUD, text, character selector) is exactly the 16:9 layout, centered, so nothing is stretched, spread out or overlapping. |
+| Aspect ratio | The picture follows the real shape of the game window (4:3, 16:10, 16:9, 21:9, 32:9, any window), so the Aspect row of Video Settings is removed (it had nothing left to choose). 16:9 is the base: the world widens sideways with the screen, while the UI (HUD, text, character selector) is exactly the 16:9 layout, centered, so nothing is stretched, spread out or overlapping. |
 | Render scale | 50-300 % internal resolution, native row in Video Settings. The game itself runs at the larger size (windowed or borderless; the Fullscreen choice is skipped while the scale is not 100 %) and the picture is scaled to the window on present. |
 | FSAA | Row removed from Effects Settings: render scale supersamples the whole frame and replaces it. |
 | Input | Player 1 hot-switches keyboard / gamepad. A second gamepad joins as player 2 with **Start**; lost pads drop out cleanly and never lock the pause menu. |
