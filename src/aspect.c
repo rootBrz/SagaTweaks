@@ -13,6 +13,7 @@
  */
 #include "all.h"
 
+int g_probe_effects;   /* ProbeEffects: log the flying sprite effects (picked-up studs) every frame */
 int g_fix_aspect = 1;   /* FixAspect: 0 leaves the game's own aspect handling untouched */
 double g_force_aspect;   /* debug: lay out for this width / height whatever the backbuffer is (ForceAspect) */
 
@@ -54,9 +55,35 @@ double AspectValue(void)
     return real > 1.0 && real < 8.0 ? real : 16.0 / 9.0;
 }
 
+/* Debug: the sprite effect records (276 bytes, sub_560B60 / sub_561400): flags +216, progress +188 / +192, positions at floats 34 (end), 37 (start), 40 (current), scales at 43..46. */
+static void ProbeEffects(void)
+{
+    static unsigned frame;
+    char line[320];
+    int i;
+
+    frame++;
+    for (i = 0; i < 128; i++) {
+        const float *r = (const float *)(0x00947BC0u + 276u * i);
+        const uint8_t *b = (const uint8_t *)r;
+        uint32_t flags = *(const uint32_t *)(b + 216);
+
+        if (!b[248] || !(flags & 0x20000))
+            continue;
+        snprintf(line, sizeof line,
+                 "fx %u #%d flags %05X t %.3f/%.3f  end %.3f %.3f %.3f  start %.3f %.3f %.3f  cur %.3f %.3f %.3f  scale %.3f %.3f %.3f %.3f  aspect %.3f",
+                 frame, i, flags, r[47], r[48], r[34], r[35], r[36], r[37], r[38], r[39], r[40], r[41], r[42],
+                 r[43], r[44], r[45], r[46], AspectValue());
+        Log(line);
+    }
+}
+
 void AspectFrame(void)
 {
     static const int screen = 3;
+
+    if (g_probe_effects)
+        ProbeEffects();
 
     if (!g_fix_aspect)
         return;
@@ -183,10 +210,61 @@ static int TextReady(void)
            ADDR_TEXT_FN + 10 + *(const int32_t *)(b + 6) == ADDR_CHKSTK;
 }
 
+/*
+ * Flying studs (sprite effects, sub_561400 draws them from sub_4BAE40): a picked-up stud starts at its screen position, stored as a
+ * fraction of the screen (record float 40, +-1 at the screen's sides: the log of ProbeEffects shows it fixed for the whole flight) and
+ * flies to the counter's icon. The effect is drawn through the HUD mapping (HUD x * flt_87B938), which is the 16:9 one at every ratio,
+ * so on a wider screen the start was pulled toward the middle and the stud jumped when it began to fly. The start x is scaled by
+ * ratio / (16/9) once per record (a record whose value the game rewrote is scaled again; one that is unchanged is left alone).
+ */
+#define ADDR_FX_DRAW 0x00561400u
+static const uintptr_t k_fx_calls[] = { 0x004BB916u, 0x004BBA52u };
+
+static void ScaleEffectStarts(void)
+{
+    static float done[128];   /* the value written back for each record, 0 = not scaled yet */
+    double k = AspectValue() / (16.0 / 9.0);
+    int i;
+
+    for (i = 0; i < 128; i++) {
+        float *r = (float *)(0x00947BC0u + 276u * i);
+        const uint8_t *b = (const uint8_t *)r;
+        uint32_t flags = *(const uint32_t *)(b + 216);
+
+        if (!b[248] || (flags & 0x20001) != 0x20001) {
+            done[i] = 0.0f;
+        } else if (r[40] != 0.0f && r[40] != done[i]) {
+            r[40] = (float)(r[40] * k);
+            done[i] = r[40];
+        }
+    }
+}
+
+static void __cdecl EffectsDraw(void)
+{
+    if (g_fix_aspect)
+        ScaleEffectStarts();
+    ((void (__cdecl *)(void))ADDR_FX_DRAW)();
+}
+
 static const uint8_t k_camera_orig[8] = { 0x51, 0x83, 0x3D, 0x94, 0x64, 0x82, 0x00, 0x02 };
+
+static int CallTo(uintptr_t site, uintptr_t fn)
+{
+    const uint8_t *b = (const uint8_t *)site;
+
+    return b[0] == 0xE8 && site + 5 + *(const int32_t *)(b + 1) == fn;
+}
 
 int AspectReady(void)
 {
+    {
+        int c;
+
+        for (c = 0; c < 2; c++)
+            if (!CallTo(k_fx_calls[c], ADDR_FX_DRAW))
+                return 0;
+    }
     return TextReady() && Matches(ADDR_CAMERA_FN, k_camera_orig, sizeof k_camera_orig);
 }
 
@@ -195,6 +273,7 @@ void AspectInstall(void)
     int i, ok = PatchJmp(ADDR_CAMERA_FN, CameraAspect, 5);
 
     ok &= PatchJmp(ADDR_TEXT_FN, TextHook, 10);
+    ok &= PatchCall(k_fx_calls[0], EffectsDraw) && PatchCall(k_fx_calls[1], EffectsDraw);
     for (i = 0; i < 4; i++)
         ok &= PatchJmp(k_width_reads[i], TextWidthStub, 6) && WritePatch(k_width_reads[i], "\xE8", 1);
     Log(ok ? "aspect ratio installed" : "aspect ratio install FAILED");

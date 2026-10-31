@@ -6,6 +6,7 @@ Each release needs a `## <version>` section here matching `VERSION`. The release
 
 - Fixed: the zipline / rope carried the hero too far at high frame rates. The rope's rest offset is computed once when the hero grabs it, and 1.2.0 scaled that one-time value with the frame time, as if it were applied every frame. The patch is removed, the grab is the game's own at every frame rate.
 - Fixed: the picture, text and HUD follow the real shape of the game window at every ratio. "From Screen Res" and 16:10 drew a 16:9 picture with 16:9-wide text (squeezed on 16:10, stretched on 21:9 such as 2560x1080 or 32:9). 16:9 is the base: the world widens sideways, while the UI (HUD, text, character selector, coin and stud counters) is exactly the 16:9 layout, centered, so nothing is stretched, spread out or overlapping. The Aspect row of Video Settings is removed: the game is kept on From Screen Res, which is what every ratio now needs. `FixAspect=0` (also a row on the Tweaks page) turns all of it off and brings the Aspect row back. `ForceAspect` (debug) lays out for a given ratio on any screen.
+- Fixed (untested): picked-up studs jumped when they began to fly to the counter on screens wider or narrower than 16:9: their start position was off by the ratio. `ProbeEffects=1` (debug) logs the flying sprite effects.
 - Fixed: the title screen's zoom now matches the menu's exactly at every ratio (read from the game's camera instead of a fixed number), so the cut to the main menu no longer jumps.
 
 ## 1.3

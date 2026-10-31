@@ -468,6 +468,8 @@ frame) and every ratio is handled the same way. The row itself is hidden (`src/m
   bars were not wanted); 21:9 / 32:9 rows in the menu (6 patches of the row, redundant once the real ratio is used);
   `dbl_7516A8` (0.8) is a pooled constant with 61 unrelated users, not the HUD scale.
 
+- Flying studs: the sprite effect records (276 bytes at `0x947BC0`, spawned by `sub_560B60`, drawn by `sub_561400`, two calls in `sub_4BAE40`; flags `0x2012D` for a stud, `+216`; active byte `+248`; progress floats 47 / 48; end 34..36, start 37..39, current / start on the HUD plane 40..42, scales 43..46) start at the stud's world position, which the game turns into a screen fraction (float 40, +-1 at the screen sides, fixed for the flight) and then draws through the HUD mapping (HUD x * `flt_87B938`), the 16:9 one. On another ratio the start was compressed or stretched sideways. `ScaleEffectStarts` scales float 40 by ratio / (16/9), once per record value (`ProbeEffects` logged the fields; the 16:9 and 21:9 logs differ only in that value). Not verified in game.
+
 `FixAspect=0` (Tweaks page row, live) makes `CameraAspect` replicate `sub_565470` (aspect 9/16, or 10/16 for setting 2; field of view and text scale as the game has them), `AspectValue` return the game's own ratio, the text hooks and `AspectFrame` do nothing, and the Aspect row drawn again (`AspectRow` in `src/menus.c`; the Video Settings row indices after it shift by one).
 
 `ForceAspect` (ini, debug) replaces the real ratio, class and mode, so the layout of any ratio can be seen on any screen (stretched).
