@@ -59,6 +59,11 @@ void ConfigLoad(const char *ini)
     INI_INT(g_probe_anim, "ProbeAnim", 0);
     INI_INT(g_live_ini, "LiveIni", 0);
     INI_INT(g_probe_consts, "ProbeConsts", 0);
+    INI_INT(g_probe_draw, "ProbeDraw", 0);
+    INI_INT(g_fix_title_aspect, "FixTitleAspect", 1);
+    INI_INT(g_probe_draw_x, "ProbeDrawX", 0);
+    INI_INT(g_probe_draw_z, "ProbeDrawZ", 0);
+    INI_INT(g_probe_draw_r, "ProbeDrawR", 0);
     INI_INT(g_dump_textures, "DumpTextures", 0);
 #undef INI_INT
 

@@ -411,3 +411,26 @@ last two steps was built and tested on the Deck (Speeder Showdown, 850 fps). The
 the log was climbable with the variable step anyway, so it was removed. Findings worth keeping: every mesh draw is
 preceded by one `SetVertexShaderConstantF(16, 4)` (the matrix), then `40x1`, `28x11` (bones), `111x1` per draw; at 60 fps
 all 10 jumps rose to the full height while at 850 fps they split into 0.50 (fail) and 0.535 (success) rises.
+
+## Title screen aspect (1.3)
+
+While the title screen ("press any button", menu depth 1, id 31) is up, the scene is drawn with the title camera of the level data.
+Its projection has y scale / x scale = 1.333 where the menus and levels have 1.778, so on a wide viewport the logo (a 3D object in
+that scene, it is not a 2D sprite), the characters and the ships are stretched sideways: the LEGO box of the logo is 1.34 times as
+wide as high. Seen in the vertex shader constants (register 0, the view x projection matrix of the scene: |row 1| / |row 0| =
+1.333 on the title, 1.778 elsewhere); the viewport is the full backbuffer all the time.
+
+`sub_5FA330(view, projection)` sets the scene camera (view, projection, their product at `0x97E230`, the current projection at
+`0x280D820`) and has three callers (`0x5F6B77`, `0x5F6ED4`, `0x603B44`). `CameraSet` (`src/render.c`) replaces those calls: while
+the titles level is current (`*(game + 296) == dword_951B88`), the viewport is wider than 1.45 and the projection ratio is about
+1.333, it passes a copy of the projection with `m[0] = m[5] / aspect`. Everything of the title scene is then right and fills the
+whole width (the stars), no bars.
+
+The cut to the menu camera (no blend, one frame) changes only the field of view: title y scale 2.5415 (43 degrees), menu y scale
+2.9379 (37.4 degrees), the same position, so the logo jumped 1.156 times bigger when the menu opened (box 103 -> 119 px at 640 wide).
+`CameraSet` also replaces the title y scale by the menu one, so the logo is identical before and after. The title scene is shown
+16 % closer than the artists made it. Switch: `FixTitleAspect`.
+
+Dead ends: patching the aspect floats found in the heap (`0x59D8748`, `0x59D8754`) or the finished matrices (`0x280D820`,
+`0x2857088`) after the fact only disturbs the characters, the camera is rebuilt from the projection every frame. A centred 4:3
+viewport (first version) also works but leaves black bars and needs a black clear of the target.

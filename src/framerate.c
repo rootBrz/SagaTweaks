@@ -374,6 +374,7 @@ static const uintptr_t k_trunc_sites[] = {
 #define TRUNC_SITES ((int)(sizeof k_trunc_sites / sizeof k_trunc_sites[0]))
 
 static int CallSiteOk(uint32_t site, uint32_t fn);
+static int ExtraRollsOk(void);
 
 static int TruncSitesMatch(void)
 {
@@ -463,6 +464,34 @@ extern void RopeImpulseStub(void);
  * replaced by one that always fails on frames without a 60 Hz tick (g_steps), so the roll happens 60 times a second.
  */
 #define ADDR_BUILDIT_ROLL 0x00591F2Bu
+/*
+ * Spinner sparks (class "Spinner", update sub_5568E0 with the 772-byte crank records, flags +172 & 0x22): every call rolls
+ * "random < 2048 of 65536" and spawns two effects at the crank on success, about 2 a second at 60 fps and 26 a second at
+ * 850 fps. Same fix as the building blocks: the roll can only succeed on frames with a 60 Hz tick.
+ */
+#define ADDR_SPINNER_SPARK_ROLL 0x00556A95u
+/*
+ * Wall levers (gizmo class "Lever", render-prep hook sub_4903F0, called once per rendered frame, not per game update, so
+ * LogicHz does not reach it): an idle lever rolls "random < 2048" on every call (call at 0x49069A) and on success wobbles
+ * its handle for 0.15 s, so a lever at 850 fps wobbled about 26 times a second instead of 2. Same gate as the building
+ * blocks.
+ */
+#define ADDR_LEVER_WOBBLE_ROLL 0x0049069Au
+/*
+ * Found by scanning every call of sub_54FA60 in the exe (docs/CLASSES.md), same shape, outside the class hooks:
+ * 0x59C85A  hero turning a crank (sub_59BD40): "random < 2048" puffs sparks / sound (sub_554D70) on every call it does not turn;
+ * 0x4EA11C / 0x4EA43A  Force Lightning (sub_4EA110): screen shake "random < 2048" and pad rumble "random < 4096" every call;
+ * 0x547D80  ambient sound (sub_547D70): "random < 1024" every call once its 3-5 s cooldown has run out.
+ * All four treat a failed roll as "do nothing", which is what BuilditRoll returns on frames without a 60 Hz tick.
+ */
+#define ADDR_CRANK_PUFF_ROLL      0x0059C85Au
+#define ADDR_LIGHTNING_SHAKE_ROLL 0x004EA11Cu
+#define ADDR_LIGHTNING_RUMBLE_ROLL 0x004EA43Au
+#define ADDR_AMBIENT_SOUND_ROLL   0x00547D80u
+static const uintptr_t k_extra_rolls[] = { ADDR_CRANK_PUFF_ROLL, ADDR_LIGHTNING_SHAKE_ROLL, ADDR_LIGHTNING_RUMBLE_ROLL, ADDR_AMBIENT_SOUND_ROLL };
+#define EXTRA_ROLLS ((int)(sizeof k_extra_rolls / sizeof k_extra_rolls[0]))
+/* The "HatMachine" class (render-prep hook sub_472FE0) is a copy of the same code: roll at 0x4734A9, 0.15 s wobble. */
+#define ADDR_HATMACHINE_WOBBLE_ROLL 0x004734A9u
 #define ADDR_RANDOM_FN    0x0054FA60u
 
 /*
@@ -534,7 +563,7 @@ static int RateSitesMatch(void)
     for (i = 0; i < 2; i++)
         if (!CallSiteOk(k_rate_calls[i], ADDR_TRUNC_FN))
             return 0;
-    return CallSiteOk(ADDR_BUILDIT_ROLL, ADDR_RANDOM_FN) &&
+    return CallSiteOk(ADDR_BUILDIT_ROLL, ADDR_RANDOM_FN) && CallSiteOk(ADDR_SPINNER_SPARK_ROLL, ADDR_RANDOM_FN) && CallSiteOk(ADDR_LEVER_WOBBLE_ROLL, ADDR_RANDOM_FN) && CallSiteOk(ADDR_HATMACHINE_WOBBLE_ROLL, ADDR_RANDOM_FN) && ExtraRollsOk() &&
            CallSiteOk(k_shake_calls[0], ADDR_SHAKE_FN) && CallSiteOk(k_shake_calls[1], ADDR_SHAKE_FN) &&
            CallSiteOk(k_shake_calls[2], ADDR_SHAKE_FN) &&
            Matches(ADDR_EMIT_DEC, k_emit_dec_orig, sizeof k_emit_dec_orig) &&
@@ -990,6 +1019,16 @@ static int __cdecl BuilditRoll(void)
     return g_steps > 0 ? ((int (__cdecl *)(void))ADDR_RANDOM_FN)() : 0x7FFFFFFF;
 }
 
+static int ExtraRollsOk(void)
+{
+    int i;
+
+    for (i = 0; i < EXTRA_ROLLS; i++)
+        if (!CallSiteOk(k_extra_rolls[i], ADDR_RANDOM_FN))
+            return 0;
+    return 1;
+}
+
 static int ScriptTickSiteOk(void)
 {
     return CallSiteOk(ADDR_SCRIPT_TICK_CALL, ADDR_SCRIPT_TICK_FN);
@@ -1245,6 +1284,11 @@ void FramerateInstall(void)
         ok &= PatchPtr(ADDR_EMIT_PATH + 2, &g_path_step);
         ok &= PatchJmp(ADDR_CNT4231, Cnt4231Stub, sizeof k_cnt4231_orig);
         ok &= PatchCall(ADDR_BUILDIT_ROLL, BuilditRoll);
+        ok &= PatchCall(ADDR_SPINNER_SPARK_ROLL, BuilditRoll);
+        ok &= PatchCall(ADDR_LEVER_WOBBLE_ROLL, BuilditRoll);
+        ok &= PatchCall(ADDR_HATMACHINE_WOBBLE_ROLL, BuilditRoll);
+        for (i = 0; i < EXTRA_ROLLS; i++)
+            ok &= PatchCall(k_extra_rolls[i], BuilditRoll);
         for (i = 0; i < SHAKE_CALLS; i++)
             ok &= PatchCall(k_shake_calls[i], ShakeOffset);
         ok &= PatchCallPad(ADDR_CNT_M10, CntM10Stub, sizeof k_cnt_m10_orig);
@@ -1252,7 +1296,7 @@ void FramerateInstall(void)
         ok &= PatchCallPad(ADDR_CNT_P10, CntP10Stub, sizeof k_cnt_p10_orig);
         ok &= PatchCallPad(ADDR_ROPE_IMP, RopeImpulseStub, sizeof k_rope_imp_orig);
         ok &= PatchCallPad(ADDR_RELEASE_CMP, ReleaseSlackStub, sizeof k_release_orig);
-        Log(ok ? "lightning, rotation, overlay, rope, knockback, push, saber clash, speed boost, smoothing step, counter, building-block twitch, object shake, rope and button release rates scaled" : "rate patch FAILED");
+        Log(ok ? "lightning, rotation, overlay, rope, knockback, push, saber clash, speed boost, smoothing step, counter, building-block twitch, spinner sparks, lever and hat machine wobble, crank puffs, Force Lightning shake and rumble, ambient sound, object shake, rope and button release rates scaled" : "rate patch FAILED");
     }
     Log(PatchJmp(ADDR_ANGLE_APPROACH, Approach, 7) ? "angle smoothing rounding fixed" : "angle smoothing patch FAILED");
     Log(PatchCall(ADDR_HEADING_TRUNC, DitherStub) ? "heading step rounding fixed" : "heading step patch FAILED");

@@ -2,6 +2,13 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.3
+
+- Fixed: wall levers wobbled constantly at high frame rates, as did the hat machine. Wobble and spark effects now start as often as at 60 fps. `FixGameplayRates=0` turns the fix off.
+- Fixed (untested): the same problem for crank sparks, Force Lightning shake and rumble, and a rare ambient sound.
+- Fixed: the title screen ("press any button") was stretched sideways on wide screens. It is now drawn with the correct proportions, and the logo no longer jumps when the menu opens. `FixTitleAspect=0` turns it off.
+- Fixed (untested on Windows): the game opens in the chosen Windowed mode right away, and Borderless mode takes keyboard focus.
+
 ## 1.2.0
 
 - Fixed: Episode IV "Death Star Escape": the row of five buttons you light with the cart can be completed at high frame rates again. A button now lets go 33 ms after its hold time ends at every frame rate, as it does at 60 fps.

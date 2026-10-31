@@ -157,6 +157,7 @@
 #define ADDR_DEVICE_RESET     0x006E3940u  /* sub_6E3940(this, moveWindow) (thiscall) */
 #define ADDR_GAME_WINDOW      0x00924864u  /* hWnd */
 #define ADDR_WINDOW_RECT      0x0082647Cu  /* nWidth, nHeight, X, Y */
+#define ADDR_SAVED_SIZE       0x00826474u  /* saved resolution: width, height (dword_826474/78) */
 #define DEVICE_MODE_INDEX_OFS 0x660        /* mode table index in use */
 #define DEVICE_WINDOWED_OFS   0x65C        /* byte: windowed requested */
 

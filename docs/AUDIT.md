@@ -347,3 +347,15 @@ Each getter fills a 30-dword descriptor (name, update function at `+24`) from th
 `sub_558070`, GizBuildit `sub_5912E0`, GizmoPickup `sub_5716C0`, Grapple `sub_54E0C0`, Techno `sub_4CD220`, Tube `sub_56DB80`, ZipUp
 `sub_4D6FD0`, GizTurret `sub_5AC080`, PushBlocks `sub_5A5BD0`, SecurityDoor `sub_4BD280`, Shard `sub_4C0420`, Signal `sub_4C7D30`,
 Attracto `sub_402CE0`; class numbers differ per list, match them by update address.
+
+## 16. Findings after 1.2.0 (version 1.3)
+
+* The wall lever (and hat machine) wobble at high frame rates is a per-frame roll in a **render-prep class hook**, a place
+  the audit of the game update never looked at: `sub_4903F0` / `sub_472FE0` roll `random < 2048` on every call to start a
+  0.15 s handle wobble. `LogicHz` cannot reach render-prep hooks. Same shape as the building-block twitch. The crank class
+  ("Spinner") spawned its sparks the same way. All four rolls are gated to 60 Hz (`BuilditRoll`), and so are four more found by scanning every call of the random function in the exe (crank puffs while a crank is held, Force Lightning shake and rumble, an ambient sound). `class_map.py rolls` lists them all; no small-chance per-call roll is left.
+* New rule for the audit: besides the game update `sub_491D50`, read the **class hooks** (`+52`, `+56`, `+60`) and
+  everything `sub_4927F0` calls. `docs/CLASSES.md` has the class map, the method and the list of hooks still to read.
+* A shader clock in 1/60 s steps (`flt_2857274`) was tried and removed: no visible effect, and it would step shader
+  animation at 60 Hz on faster displays.
+

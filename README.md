@@ -48,12 +48,13 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `WindowMode` | 0 | 0 fullscreen, 1 windowed, 2 borderless windowed (Video Settings row). |
 | `RenderScale` | 1.0 | Internal resolution multiplier. |
 | `FixFrameCounters` | 1 | Frame-rate independent clocks. |
-| `FixGameplayRates` | 1 | Fixes the other per-frame rates found by the code audit (see `docs/AUDIT.md`). |
+| `FixGameplayRates` | 1 | Fixes the other per-frame rates found by the code audit (see `docs/AUDIT.md`; wobbling levers and hat machine, sparks of cranks, `docs/CLASSES.md`). |
+| `FixTitleAspect` | 1 | The "press any button" screen is made for 4:3 and looked stretched sideways on wide screens; it is drawn with the correct proportions and the logo stays put when the menu opens. |
 | `FixContactVelocity` | 1 | Keeps part of the old velocity after a contact at short steps. |
 | `LogicHz` | 0 | Most game logic updates per second (0 = every frame). |
 | `FixJumpPhysics` | 1 | Jump impulse corrected to the 60 fps lift and height. |
 
-Debug-only keys, all off by default: `LogFPS` (frame rate in the log), `LogInput` (log every change of the input / player state), `LiveIni` (rereads `LogicHz`, `MaxFPS` and the fix switches once a second and logs the changes), `ProbeSweep` (logs the hero's collision sweeps), `ProbeHero` (one log line per logic update of player 1 near the log of Speeder Showdown: position, velocity, flags, input; read with `tools/audit/trace_jumps.py`), `ProbeButtons` (a log line whenever a floor button changes: triggered flag, animation state, hold timer), `ProbeLever` (a line per frame with the crank angle while a lever is held), `ProbeAnim` (per second: how often each animation list is stepped and the sum of the step), `ProbeConsts`, `DumpTextures`. They exist for reverse engineering; see `docs/REVERSING.md`.
+Debug-only keys, all off by default: `LogFPS` (frame rate in the log), `LogInput` (log every change of the input / player state), `LiveIni` (rereads `LogicHz`, `MaxFPS` and the fix switches once a second and logs the changes), `ProbeSweep` (logs the hero's collision sweeps), `ProbeHero` (one log line per logic update of player 1 near the log of Speeder Showdown: position, velocity, flags, input; read with `tools/audit/trace_jumps.py`), `ProbeButtons` (a log line whenever a floor button changes: triggered flag, animation state, hold timer), `ProbeLever` (a line per frame with the crank angle while a crank, the "Spinner" class, is held), `ProbeAnim` (per second: how often each animation list is stepped and the sum of the step), `ProbeConsts`, `ProbeDraw` (three reports in the log, 3 s each, starting 8 s after the first frame and 20 s apart: every vertex / pixel shader constant write per frame, which components change from frame to frame and by how much, with the shader hashes and primitive count of the draw it belongs to; `ProbeDrawX`, `ProbeDrawZ`, `ProbeDrawR` in centimetres keep only draws whose world matrix lies within R of (X, Z); run it at two frame rates), `DumpTextures`. They exist for reverse engineering; see `docs/REVERSING.md` and, for object classes and per-frame rolls, `docs/CLASSES.md`.
 
 ## Build
 

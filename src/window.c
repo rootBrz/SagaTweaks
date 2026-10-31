@@ -184,25 +184,72 @@ void RenderScaleSet(double v)
 #define ADDR_FIRST_DEVICE_CALL 0x006DF08Fu
 #define ADDR_FIRST_DEVICE_FN   0x006E42D0u
 
-static int g_started_borderless;
+static int g_started_windowed;   /* the first device was already created in the ini's windowed / borderless mode */
+
+/* Outer window size (and centred position, X = Y = -1) for a client size, shrunk to fit the desktop. */
+static void WindowedSize(int w, int h, int desk_w, int desk_h, int *rect)
+{
+    RECT r;
+
+    if (h > desk_h * 9 / 10) {                 /* keep the frame on the desktop */
+        w = w * (desk_h * 9 / 10) / h;
+        h = desk_h * 9 / 10;
+    }
+    if (w > desk_w - 16) {
+        h = h * (desk_w - 16) / w;
+        w = desk_w - 16;
+    }
+    r = (RECT){ 0, 0, w, h };
+    AdjustWindowRect(&r, WINDOWED_STYLE, FALSE);
+    rect[0] = r.right - r.left;
+    rect[1] = r.bottom - r.top;
+    rect[2] = rect[3] = -1;
+}
+
+/* Brings the window to the foreground with keyboard focus (SetForegroundWindow alone is refused for a background process). */
+static void FocusWindow(HWND wnd)
+{
+    HWND fg = GetForegroundWindow();
+    DWORD fg_thread = fg ? GetWindowThreadProcessId(fg, NULL) : 0, me = GetCurrentThreadId();
+    int attached = fg_thread && fg_thread != me && AttachThreadInput(me, fg_thread, TRUE);
+
+    BringWindowToTop(wnd);
+    SetForegroundWindow(wnd);
+    SetFocus(wnd);
+    if (attached)
+        AttachThreadInput(me, fg_thread, FALSE);
+}
 
 static void __attribute__((thiscall)) FirstDevice(char *dev)
 {
     HWND wnd = *(HWND *)ADDR_GAME_WINDOW;
+    int mode = g_window_mode;
+    int *rect = (int *)ADDR_WINDOW_RECT;       /* nWidth, nHeight, X, Y */
+    int desk_w = GetSystemMetrics(SM_CXSCREEN), desk_h = GetSystemMetrics(SM_CYSCREEN);
+    const int *saved = (const int *)ADDR_SAVED_SIZE;
 
-    if (g_window_mode == WINDOW_BORDERLESS && wnd) {
-        int *rect = (int *)ADDR_WINDOW_RECT;   /* nWidth, nHeight, X, Y */
-
-        rect[0] = GetSystemMetrics(SM_CXSCREEN);
-        rect[1] = GetSystemMetrics(SM_CYSCREEN);
-        rect[2] = rect[3] = 0;
-        dev[DEVICE_WINDOWED_OFS] = 1;
-        SetWindowLongA(wnd, GWL_STYLE, POPUP_STYLE);
+    if (mode != WINDOW_FULLSCREEN && wnd && (mode == WINDOW_BORDERLESS || (saved[0] > 0 && saved[1] > 0))) {
+        /*
+         * Style first, size second: on Windows the style change sends WM_SIZE at once and the game's handler stores the
+         * old window's size in nWidth / nHeight, which gave a wrongly sized window (HUD stretched against the
+         * backbuffer) until the first device reset.
+         */
+        SetWindowLongA(wnd, GWL_STYLE, mode == WINDOW_WINDOWED ? WINDOWED_STYLE : POPUP_STYLE);
         SetWindowPos(wnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-        g_started_borderless = 1;
-        Log("first device created borderless");
+        if (mode == WINDOW_WINDOWED) {
+            WindowedSize(saved[0], saved[1], desk_w, desk_h, rect);
+        } else {
+            rect[0] = desk_w;
+            rect[1] = desk_h;
+            rect[2] = rect[3] = 0;
+        }
+        dev[DEVICE_WINDOWED_OFS] = 1;
+        g_started_windowed = 1;
+        Log(mode == WINDOW_WINDOWED ? "first device created windowed" : "first device created borderless");
     }
     ((void (__attribute__((thiscall)) *)(void *))ADDR_FIRST_DEVICE_FN)(dev);
+    if (g_started_windowed)
+        FocusWindow(wnd);
 }
 
 int WindowReady(void)
@@ -266,22 +313,7 @@ void WindowApply(void)
         mode += 4 * index;                     /* 16-byte entries: width, height, ... */
         if (mode[0] <= 0 || mode[1] <= 0)
             return;
-        int w = mode[0], h = mode[1];
-        RECT r;
-
-        if (h > desk_h * 9 / 10) {                 /* keep the frame on the desktop */
-            w = w * (desk_h * 9 / 10) / h;
-            h = desk_h * 9 / 10;
-        }
-        if (w > desk_w - 16) {
-            h = h * (desk_w - 16) / w;
-            w = desk_w - 16;
-        }
-        r = (RECT){ 0, 0, w, h };
-        AdjustWindowRect(&r, WINDOWED_STYLE, FALSE);
-        rect[0] = r.right - r.left;
-        rect[1] = r.bottom - r.top;
-        rect[2] = rect[3] = -1;
+        WindowedSize(mode[0], mode[1], desk_w, desk_h, rect);
     } else if (wmode == WINDOW_BORDERLESS) {
         rect[0] = desk_w;
         rect[1] = desk_h;
@@ -322,7 +354,7 @@ void WindowFrame(void)
     if (GetTickCount() - since < STARTUP_MS)
         return;
     done = 1;
-    if (g_started_borderless)
+    if (g_started_windowed)
         return;                                 /* already created that way */
     if (g_window_mode != WINDOW_FULLSCREEN || !g_vsync)
         WindowApply();
