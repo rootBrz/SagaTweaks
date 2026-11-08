@@ -14,6 +14,8 @@ Linux specific.
 | Frame-rate fixes | Clock counters, blink timers, grass and foliage animation, collision response and jumps behave as at 60 fps (same jump height, jumps from platforms and over the fallen tree work, at 60 and 1000 fps). |
 | Display | **VSync** and **Window Mode** (fullscreen / windowed / borderless) rows in Video Settings. |
 | Aspect ratio | The picture follows the real shape of the game window (4:3, 16:10, 16:9, 21:9, 32:9, any window), so the Aspect row of Video Settings is removed (it had nothing left to choose). 16:9 is the base: the world widens sideways with the screen, while the UI (HUD, text, character selector) is exactly the 16:9 layout, centered, so nothing is stretched, spread out or overlapping. |
+| Wide cutscenes | On screens wider than 16:9 a cutscene keeps the vertical view it has at 16:9 and widens sideways, instead of cropping the top and bottom of the shot (`CutsceneFOV`, on by default). |
+| Wide HUD | Optional: on screens wider than 16:9 the corner HUD (character portraits, hearts, stud counters, the studs that fly to them) moves out to the edges of the screen (`HudWide`, off by default). |
 | Render scale | 50-300 % internal resolution, native row in Video Settings. The game itself runs at the larger size (windowed or borderless; the Fullscreen choice is skipped while the scale is not 100 %) and the picture is scaled to the window on present. |
 | FSAA | Row removed from Effects Settings: render scale supersamples the whole frame and replaces it. |
 | Input | Player 1 hot-switches keyboard / gamepad. A second gamepad joins as player 2 with **Start**; lost pads drop out cleanly and never lock the pause menu. |
@@ -48,6 +50,9 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `VSync` | 1 | 0 presents without waiting for the display (Video Settings row). |
 | `WindowMode` | 0 | 0 fullscreen, 1 windowed, 2 borderless windowed (Video Settings row). |
 | `FixAspect` | 1 | 0 leaves the game's own aspect ratio handling untouched (the Aspect row of Video Settings comes back). Also a row on the Tweaks page. |
+| `CutsceneFOV` | 1 | 0 leaves the game's own cutscene field of view (the horizontal view of 4:3 is kept, so a screen wider than 16:9 crops the top and bottom). Also a row on the Tweaks page. |
+| `HudWide` | 0 | 1 moves the corner HUD to the edges of a screen wider than 16:9. Also a row on the Tweaks page. |
+| `ProbeCamera` | 0 | Debug: log the main camera and the projection built from it every 20 frames. |
 | `ProbeEffects` | 0 | Debug: log the flying sprite effects (picked-up studs) every frame. |
 | `ForceAspect` | 0 | Debug: lay out for this width / height (e.g. 2.37) on any screen; the picture looks stretched on a screen of another shape. |
 | `RenderScale` | 1.0 | Internal resolution multiplier. |

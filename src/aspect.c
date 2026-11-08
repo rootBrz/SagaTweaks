@@ -10,10 +10,15 @@
  * UI (HUD icons, text, character selector) is placed in camera units at a fixed size, which is the same number of pixels at the same
  * screen height, so with the 16:9 constants (vertical view, text scale) it is exactly the 16:9 layout, centered; only the world
  * widens. 16:9 is the base at every ratio. A 4:3 screen keeps the game's own 4:3 layout.
+ * Two options widen more: CutsceneFOV (a cutscene keeps its 16:9 vertical view instead of cropping top and bottom) and HudWide (the corner
+ * HUD moves out to the edges of a screen wider than 16:9).
  */
 #include "all.h"
 
+int g_probe_camera;   /* ProbeCamera: log the main camera and the projection it produced while a cutscene plays */
 int g_probe_effects;   /* ProbeEffects: log the flying sprite effects (picked-up studs) every frame */
+int g_cutscene_fov = 1;   /* CutsceneFOV: a cutscene keeps its 16:9 vertical view on wider screens */
+int g_hud_wide;   /* HudWide: the corner HUD (portraits, hearts, counters) sits at the edges of a screen wider than 16:9 */
 int g_fix_aspect = 1;   /* FixAspect: 0 leaves the game's own aspect handling untouched */
 double g_force_aspect;   /* debug: lay out for this width / height whatever the backbuffer is (ForceAspect) */
 
@@ -34,6 +39,9 @@ double g_force_aspect;   /* debug: lay out for this width / height whatever the 
 #define ADDR_TEXT_FN        0x0050C780u   /* sub_50C780(text, x, y, z, ...): every text line the game draws */
 #define ADDR_CHKSTK         0x006E6D60u
 #define WIDE_V              0.5625        /* 9 / 16: the camera aspect the widescreen field of view and HUD were made for */
+#define ADDR_HUD_PASS      0x004B9110u
+#define HUD_PASS_SIZE      0x1075u
+#define HUD_SIDE_MIN 0.4f   /* an anchor nearer the middle than this is a centered element and stays */
 #define WIDE_MIN            1.4667        /* the game's own boundary between its 4:3 and widescreen layouts */
 
 /* Width / height the picture is laid out for. With FixAspect off: what the game's own setting says (sub_6DF290). */
@@ -78,10 +86,30 @@ static void ProbeEffects(void)
     }
 }
 
+/* Debug: the main camera (fov cam[16], h / w cam[17]) next to what sub_5ED540 last built from a camera (flt_973728, flt_97372C, y scale flt_97313C, x scale flt_966378). */
+static void ProbeCamera(void)
+{
+    static unsigned frame;
+    char line[256];
+    const float *cam = (const float *)*(uintptr_t *)ADDR_CAMERA_PTR;
+    int inst = *(const int *)0x00951BE8u;
+
+    if (++frame % 20 || !cam)
+        return;
+    snprintf(line, sizeof line,
+             "cam %u cutscene %d inst %08X flags %08X  cam fov %.4f asp %.4f  used fov %.4f asp %.4f  yscale %.4f xscale %.4f  aspect %.4f",
+             frame, *(const int *)0x00951BE0u, inst, inst ? *(const unsigned *)(inst + 80) : 0u, cam[16], cam[17],
+             *(const float *)0x00973728u, *(const float *)0x0097372Cu, *(const float *)0x0097313Cu, *(const float *)0x00966378u,
+             AspectValue());
+    Log(line);
+}
+
 void AspectFrame(void)
 {
     static const int screen = 3;
 
+    if (g_probe_camera)
+        ProbeCamera();
     if (g_probe_effects)
         ProbeEffects();
 
@@ -137,8 +165,9 @@ static void __cdecl CameraAspect(int wide)
     if (wide)
         fov = custom && user == 0.0f ? fv : (float)((fv + 0.75) * 0.5);
     if (custom && user != 0.0f) {
-        ((double (__cdecl *)(float))ADDR_FOV_FN)(user);
-        fov = wide ? (float)(user * (fv / 0.75)) : user;
+        float rad = (float)((double (__cdecl *)(float))ADDR_FOV_FN)(user);   /* focal length in, radians out (x87 return) */
+
+        fov = wide ? (float)(rad * (fv / 0.75)) : rad;
     }
     cam[16] = fov;
     TextScale(text);
@@ -150,10 +179,34 @@ static void __cdecl CameraAspect(int wide)
  * would drift away from their icons. Every text line goes through sub_50C780, whose x anchor is pulled in to the 16:9 width (line
  * contents are laid out from the anchor, so they keep their spacing).
  */
+static int g_in_hud;   /* the per-player HUD (sub_4B9110) is being drawn */
+
+/* HudWide: an anchor on a side of the screen moves outward by the width the screen has beyond 16:9 (x = +-1 is the 16:9 side). */
+static float SideShift(float x)
+{
+    double d = AspectValue() / (16.0 / 9.0) - 1.0;
+
+    if (!g_hud_wide || !g_fix_aspect || d <= 0.0 || fabsf(x) < HUD_SIDE_MIN)
+        return x;
+    return (float)(x + (x > 0.0f ? d : -d));
+}
+
+float __cdecl HudShift(float x)
+{
+    return g_in_hud ? SideShift(x) : x;
+}
+
+/* x points at the x argument of sub_50C780 on entry, the return address is two words below it. Text drawn by a callee of the HUD
+ * (the join prompt inside sub_4B88B0) is placed from an anchor that was already moved, so only a call made by sub_4B9110 itself moves. */
 void __cdecl TextAnchor(float *x)
 {
-    if (g_fix_aspect && *(const uint8_t *)ADDR_WIDE)
+    uintptr_t ret = *(const uintptr_t *)((const char *)x - 8);
+
+    if (g_fix_aspect && *(const uint8_t *)ADDR_WIDE) {
+        if (ret >= ADDR_HUD_PASS && ret < ADDR_HUD_PASS + HUD_PASS_SIZE)
+            *x = HudShift(*x);
         *x = (float)(*x * (16.0 / 9.0) / AspectValue());
+    }
 }
 
 extern void TextHook(void);
@@ -231,7 +284,7 @@ static const uintptr_t k_fx_calls[] = { 0x004BB916u, 0x004BBA52u };
 
 static void ScaleEffectStarts(void)
 {
-    static float done_x[128], done_s[128];   /* the values written back for each record, 0 = not scaled yet */
+    static float done_x[128], done_s[128], done_e[128];   /* the values written back for each record, 0 = not scaled yet */
     double k = AspectValue() / (16.0 / 9.0);
     int i;
 
@@ -241,8 +294,12 @@ static void ScaleEffectStarts(void)
         uint32_t flags = *(const uint32_t *)(b + 216);
 
         if (!b[248] || (flags & 0x20001) != 0x20001) {
-            done_x[i] = done_s[i] = 0.0f;
+            done_x[i] = done_s[i] = done_e[i] = 0.0f;
             continue;
+        }
+        if ((flags & 8) && r[34] != 0.0f && r[34] != done_e[i]) {   /* the flight's end on the HUD: it follows the corner HUD (HudWide) */
+            r[34] = SideShift(r[34]);
+            done_e[i] = r[34];
         }
         if (r[40] != 0.0f && r[40] != done_x[i]) {
             r[40] = (float)(r[40] * k);
@@ -260,6 +317,59 @@ static void __cdecl EffectsDraw(void)
     if (g_fix_aspect)
         ScaleEffectStarts();
     ((void (__cdecl *)(void))ADDR_FX_DRAW)();
+}
+
+/*
+ * A cutscene sets its own field of view (sub_40ADE0: the lens at flt_921360 through sub_5D6CC0) and scales it by (4/3) / ratio, with the
+ * ratio from sub_40A520: the horizontal view stays that of 4:3 and a wider screen crops the top and bottom of the shot. The ratio is
+ * held at 16:9 from there up, so the vertical view stays that of 16:9 and the shot widens sideways, like the gameplay camera.
+ */
+#define ADDR_RATIO_FN   0x0040A520u   /* sub_40A520: this = dev, x87 return = width / height for the setting */
+#define ADDR_RATIO_CALL 0x0040AF3Cu
+
+static double __cdecl CutsceneRatio(void)
+{
+    double r = ((double (__fastcall *)(void *))ADDR_RATIO_FN)((void *)ADDR_DEVICE_OBJECT);
+
+    return g_fix_aspect && g_cutscene_fov && r > 16.0 / 9.0 ? 16.0 / 9.0 : r;
+}
+
+
+/*
+ * The per-player HUD (sub_4B9110) draws every side element at a fixed x = +-const through a handful of sprite calls; each of those calls
+ * gets a thunk that passes its x argument (the first or the second stack argument) through HudShift. An element moves as a whole, as
+ * its parts are placed relative to the anchor. Text goes through TextAnchor.
+ */
+#define HUD_THUNK(name, arg_off, target) \
+    extern void name(void); \
+    __asm__(".text\n.globl _" #name "\n_" #name ":\n" \
+            "    pushl %eax\n    pushl %ecx\n    pushl %edx\n" \
+            "    pushl " #arg_off "+12(%esp)\n    call _HudShift\n    addl $4,%esp\n    fstps " #arg_off "+12(%esp)\n" \
+            "    popl %edx\n    popl %ecx\n    popl %eax\n    pushl $" #target "\n    ret\n")
+
+#define ADDR_HUD_PASS_CALL 0x004BB17Bu   /* call sub_4B9110 in sub_4BAE40 */
+#define ADDR_SPRITE_FN     0x0050D910u   /* sub_50D910(tex, x, y, ...) */
+#define ADDR_PORTRAIT_FN   0x0055B830u   /* sub_55B830(id, x, y, ...) */
+#define ADDR_ICON_FN       0x00552C10u   /* sub_552C10(x, y, ...) */
+#define ADDR_HEARTS_FN     0x004B88B0u   /* sub_4B88B0(x, y, ...), player in EAX */
+
+HUD_THUNK(HudSprite, 8, 0x0050D910);     /* ADDR_SPRITE_FN, x is the second argument */
+HUD_THUNK(HudPortrait, 8, 0x0055B830);   /* ADDR_PORTRAIT_FN */
+HUD_THUNK(HudIcon, 4, 0x00552C10);       /* ADDR_ICON_FN, x is the first argument */
+HUD_THUNK(HudHearts, 4, 0x004B88B0);     /* ADDR_HEARTS_FN: the player is in EAX, x is the first stack argument */
+
+static const struct { uintptr_t site, target; void (*thunk)(void); } k_hud_calls[] = {
+    { 0x004B9479u, ADDR_PORTRAIT_FN, HudPortrait },
+    { 0x004B95B7u, ADDR_SPRITE_FN, HudSprite }, { 0x004B967Eu, ADDR_SPRITE_FN, HudSprite }, { 0x004B99E5u, ADDR_SPRITE_FN, HudSprite },
+    { 0x004B9793u, ADDR_ICON_FN, HudIcon }, { 0x004B9807u, ADDR_ICON_FN, HudIcon }, { 0x004B9C57u, ADDR_ICON_FN, HudIcon },
+    { 0x004B9924u, ADDR_HEARTS_FN, HudHearts },
+};
+
+static void __cdecl HudPass(int dim)
+{
+    g_in_hud = 1;
+    ((void (__cdecl *)(int))ADDR_HUD_PASS)(dim);
+    g_in_hud = 0;
 }
 
 static const uint8_t k_camera_orig[8] = { 0x51, 0x83, 0x3D, 0x94, 0x64, 0x82, 0x00, 0x02 };
@@ -280,7 +390,16 @@ int AspectReady(void)
             if (!CallTo(k_fx_calls[c], ADDR_FX_DRAW))
                 return 0;
     }
-    return TextReady() && Matches(ADDR_CAMERA_FN, k_camera_orig, sizeof k_camera_orig);
+    {
+        size_t h;
+
+        for (h = 0; h < sizeof k_hud_calls / sizeof k_hud_calls[0]; h++)
+            if (!CallTo(k_hud_calls[h].site, k_hud_calls[h].target))
+                return 0;
+        if (!CallTo(ADDR_HUD_PASS_CALL, ADDR_HUD_PASS))
+            return 0;
+    }
+    return CallTo(ADDR_RATIO_CALL, ADDR_RATIO_FN) && TextReady() && Matches(ADDR_CAMERA_FN, k_camera_orig, sizeof k_camera_orig);
 }
 
 void AspectInstall(void)
@@ -288,6 +407,10 @@ void AspectInstall(void)
     int i, ok = PatchJmp(ADDR_CAMERA_FN, CameraAspect, 5);
 
     ok &= PatchJmp(ADDR_TEXT_FN, TextHook, 10);
+    ok &= PatchCall(ADDR_RATIO_CALL, CutsceneRatio);
+    for (i = 0; i < (int)(sizeof k_hud_calls / sizeof k_hud_calls[0]); i++)
+        ok &= PatchCall(k_hud_calls[i].site, k_hud_calls[i].thunk);
+    ok &= PatchCall(ADDR_HUD_PASS_CALL, HudPass);
     ok &= PatchCall(k_fx_calls[0], EffectsDraw) && PatchCall(k_fx_calls[1], EffectsDraw);
     for (i = 0; i < 4; i++)
         ok &= PatchJmp(k_width_reads[i], TextWidthStub, 6) && WritePatch(k_width_reads[i], "\xE8", 1);

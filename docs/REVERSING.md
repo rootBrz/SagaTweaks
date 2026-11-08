@@ -474,6 +474,22 @@ frame) and every ratio is handled the same way. The row itself is hidden (`src/m
 
 - Flying studs: the sprite effect records (276 bytes at `0x947BC0`, spawned by `sub_560B60`, drawn by `sub_561400`, two calls in `sub_4BAE40`; flags `0x2012D` for a stud, `+216`; active byte `+248`; progress floats 47 / 48; end 34..36, start 37..39, current / start on the HUD plane 40..42, scales 43..46) start at the stud's world position, which the game turns into a screen fraction (float 40, +-1 at the screen sides, fixed for the flight) and then draws through the HUD mapping (HUD x * `flt_87B938`), the 16:9 one. On another ratio the start was compressed or stretched sideways. `ScaleEffectStarts` scales float 40 and the start size, float 46 (also a fraction of the screen width: the stud began smaller than the one on the ground), by ratio / (16/9), once per record value; y (a fraction of the height) and z (the HUD plane) do not depend on the ratio (`ProbeEffects` logged the fields; the 16:9 and 21:9 logs differ only in that value). Not verified in game.
 
+- Cutscene field of view (`CutsceneFOV`): during a cutscene the camera is set by `sub_40ADE0` (custom field of view flag `byte_921359`, lens `flt_921360`),
+  not by `sub_565470`: `sub_5D6CC0` turns the lens (focal length) into radians (x87 return value) and the result is scaled by `(4/3) / sub_40A520()`
+  (`0x40AF3C`; `sub_40A520` returns the ratio of the setting, with setting 3 the real one). That keeps the horizontal view of 4:3 and a wider
+  screen crops the top and bottom. `CutsceneRatio` (`src/aspect.c`) replaces the call and returns at most 16/9, so the vertical view of 16:9 stays. Found with
+  a gdb watchpoint on `cam + 64` during `Negotiations_Intro` (writers: `0x40AF37`, `0x40AF51` and our own `CameraAspect`). `CameraAspect` itself used the
+  lens value (45.5) as radians in this custom field of view path, because it ignored the x87 return of `sub_5D6CC0`; the camera was rebuilt from the
+  right value by `sub_40ADE0` before drawing, so it was not visible. It now uses the return value. `ProbeCamera` logs `cam[16]` / `cam[17]` and the projection scales.
+- Wide HUD (`HudWide`): the per-player HUD `sub_4B9110` (called from `sub_4BAE40` at `0x4BB17B`) places each side element at a fixed `x = +-const`
+  (portrait 0.775, hearts 0.65, counters 0.61 / 0.65 / 0.685, +-1 is the 16:9 side) through `sub_55B830` (x second argument), `sub_50D910` (second),
+  `sub_552C10` (first) and `sub_4B88B0` (first, the player is in EAX), plus text through `sub_50C780`. Each of those call sites gets a thunk that
+  passes x through `HudShift`: an anchor with `|x| >= 0.4` moves outward by `ratio / (16/9) - 1`, a rigid shift, so spacing inside a group is kept (the
+  earlier attempts changed the constants, which the code also adds together). Text is shifted only for calls made by `sub_4B9110` itself (return address
+  check in `TextAnchor`): the join prompt is drawn from inside `sub_4B88B0` from an anchor that already moved. The flying effects interpolate from
+  `r[40]` to `r[34]` (flag 8) and `r[34]` is the counter icon, so `ScaleEffectStarts` shifts it the same way (logged: end -0.983 = -0.65 - 0.333 at 21:9).
+  Not touched: centered elements, the character selector, the free play and pause screens. Checked at `ForceAspect=2.37` on the Deck (stretched picture).
+
 `FixAspect=0` (Tweaks page row, live) makes `CameraAspect` replicate `sub_565470` (aspect 9/16, or 10/16 for setting 2; field of view and text scale as the game has them), `AspectValue` return the game's own ratio, the text hooks and `AspectFrame` do nothing, and the Aspect row drawn again (`AspectRow` in `src/menus.c`; the Video Settings row indices after it shift by one).
 
 `ForceAspect` (ini, debug) replaces the real ratio, class and mode, so the layout of any ratio can be seen on any screen (stretched).

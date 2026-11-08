@@ -2,6 +2,11 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 1.5.0
+
+- Fixed: cutscenes cropped the top and bottom of the shot on screens wider than 16:9 (21:9, 32:9). A cutscene now keeps its 16:9 vertical view and widens sideways like the gameplay camera. "Wide Cutscene FOV" on the Tweaks page (`CutsceneFOV`) turns it off.
+- New: "Wide HUD" on the Tweaks page (`HudWide`, off by default) moves the character portraits, hearts and stud counters to the edges of a screen wider than 16:9. The studs that fly to the counters follow.
+
 ## 1.4.1
 
 - Fixed: the title screen still jumped in size when the main menu opened on wide screens.
