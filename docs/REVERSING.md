@@ -323,6 +323,53 @@ routine `sub_6D9120` is reused for hot-switching. Bugs found with state dumps in
 * "join with Start": the join code calls `sub_6D9120` at `0x4280D3`; hooking that call lets only
   Start (code 7) through. The "Press F2 or any button" text lives in heap memory, rewritten in place.
 
+Hot-switch and a shared keyboard: raw ids 10..13 are the four layouts of the one keyboard (slot 0 uses 10 or 11, slot 1 uses 12 or 13,
+`sub_6D9510(10, slot)`; the game's scans always report 10, `sub_6D5040`) and `sub_6D8490` copies the same key state to each layout it
+polls. Hot-switch enumerated every pressed raw id and mapped each as if it were raw 10, so a key seen on raw 12 / 13 (polled once player 2
+plays on the keyboard) put player 1 on layout 13 or on device 14, which does not exist. The four ids are now folded into one "keyboard"
+bit that is ignored while either player uses the keyboard. Start on a gamepad and F1 / F2 are left to the join code `sub_427EC0` whenever
+player 2 can join (no menu page, `dword_87B738` clear), otherwise player 1 on the keyboard took the gamepad before the join code saw it.
+
+### Hover (astromech droids, jetpacks)
+- Hover phase byte `+3634`: 1 rising / flying, 2 hovering (timer `+3428`), 3 falling. Types with flag `0x40` (astromech) or `0x8000` keep it
+  between frames (`sub_498A40` clears it for everyone else). The astromech jump is `sub_562570` mode 4 (jump type `+1976` = 5); `sub_4ABAC0`
+  moves 1 to 2 at the top of the rise only while jump is held, so a short hop lands with 1 and the zap `sub_4A6160` (which treats 1 as
+  airborne) does nothing: the original "R2 cannot attack after a jump" bug. `HoverAttackFix` (`src/fixes.c`) sets 3 on a grounded droid
+  outside the jump state. Not tried in the game yet.
+- Flames and other particle rates: `sub_62C350(rate, dt)` / `sub_62C300(rate per 1/60 s, dt)` roll a number of events for the frame. Where the
+  count goes to an emitter (`sub_684C90` / `sub_62C680` / `sub_62C760` -> `sub_656DC0` -> `sub_6561D0`) each event emits `30 x count x window`
+  particles and the window is the frame time `flt_8108E4`, so particles per second fall with the frame rate. All 31 callers were sorted:
+  22 feed an emitter (list in `src/game.h`, `ADDR_SPARK_CALLS` / `ADDR_THRUST_CALLS`) and roll with dt of at least 1/60 s; 9 gate one
+  sound / rumble / one-shot effect / spawned object per event (`0x403A83`, `0x42FD83`, `0x42FFD2`, `0x46A8EF`, `0x4909EF`, `0x4C8B13`,
+  `0x547CDA`, `0x58B7BB`, `0x59C727`) and are already right per second, so they are left alone.
+- Fixed counts: a call with a fixed count made every frame is right as it is (30 x count per second: `sub_410A10`, `sub_411470`,
+  `sub_583030`, `sub_4EE4C0`). A burst made once per event is not: `sub_5A99E0` (80), `sub_4364E0` / `sub_4D3800` (30 per lost
+  piece), the spinner sparks of `sub_5568E0` (2), `sub_46C400` (15, `sub_62C760`). Those calls go through `EmitOnce` / `EmitVelOnce`,
+  which hold `flt_8108E4` at 1/60 s or more for the call. `sub_62C7E0` (animation effect records: flag 4 = every frame, flag 8 = every
+  frame of a range, neither = once at an event time; rate at `+16` or fixed count at `+27`) mixes all kinds on shared call sites, so
+  the rate check at `0x62CF74` is replaced by a call that sets the window per record (burst = no rate and no flag 4 / 8) and the call
+  at `0x63042D` restores the frame's window. Not sorted: the points queued in `+654` of a character (`sub_62FBF0` at `0x630573`, one
+  particle call per point) and `sub_432E20` (rate 10 with an explicit frame-time window).
+- Menu pages that replace the HUD (page table at `0x7FACEC`: 28 bytes, id `+4`, init `+8`, draw `+12`, update `+16`; `sub_4BAE40` skips
+  `sub_4B9110` for ids 8, 12, 13, 14, 15, 16, 17) draw the corner portraits themselves at `+-flt_7FC31C`, so `HudWide` did not reach
+  them: page 8 `sub_497000`, 12 `sub_4265A0`, 13 `sub_496650`, 14 `sub_4967B0`, and the character select pages 15..17 (`sub_47B160`,
+  `sub_47B450`, Free Play `sub_47BB70`, through the stubs at `0x47E780..0x47E7A0`). The end of level screen is one of 8 / 12 / 13 / 14
+  (not told apart). Their 27 `fld ds:flt_7FC31C`, plus the one of `sub_457F70` (a left label with its icon) and of `sub_485030` (two corner portraits), read a copy (the icon of `sub_457F70` slides in from `-1.1`: the two pooled doubles at `0x4582CA` / `0x4582D8` read copies moved out by the screen's extra half-width, whatever `HudWide` says) that `AspectFrame` shifts (`g_select_corner`), which also moves the ends of the portrait
+  flights. The button hints of `sub_4B79A0` (`+-flt_7FC350`, bottom corners, 9 screens) move the same way: its one load at `0x4B7B16`
+  reads `g_hint_corner`.
+
+### Hatches for small characters
+`sub_4CE830` (called for types with flag `0x40000`), state 15, path records "TLT_" (keys `spline`, `duration`, `range`, `1_way`, `crawl`,
+`flap1` / `flap2`; parser table at `0x7FD1E4`), 4 path points at `*(*(tlt + 64) + 8)`. Crawl in (points 0 -> 1 or 3 -> 2, timer
+`+1916` / `+1924`), 2 s hidden leg with a fade (`+1971` = 1), crawl out. During a crawl every frame does: `sub_54FB80(pos, pos, point,
+10)`, floor query `sub_5506F0(0, pos, 5.0, -1)` (`sub_673730` -> `sub_6729E0`), `y = floor - offset + t * 0.0025`. `sub_6729E0` prefers a
+walkable surface above the asked height within the given range (5) when no ceiling is between, else the floor at or below it. At 60 fps
+the pull toward the path point (below the floor) keeps the asked height under the floor; at a short frame the pull loses to the
+`0.0025` rise and the query returns the next surface up (the dome's top in the secret room of Escape From Echo Base: stuck).
+`HatchApproach` (`src/framerate.c`, call `0x4CEC76`) gives the height the pull of one 60 Hz frame. Derived from the code; not tried in
+the game. Reported detail that fits: it only happens once the breakable dome next to the hatch is destroyed,
+i.e. once the ceiling that blocked the step up is gone.
+
 ### Button prompts
 Prompts are glyphs in a font called "Buttons": a 256x128 DXT5 atlas, glyph table (12-byte records
 x,y,w) at `font+0x34`, code table at `font+0x38`. The mod builds a 256x256 atlas (Xbox art on top,

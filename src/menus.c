@@ -249,8 +249,8 @@ static const TweakOpt k_tweaks[] = {
     { "Player 1 Button Prompts",     "ButtonPromptsP1",  &g_prompt_style[0], OPT_NAMED, 0, NULL, 3, NULL, NULL, k_prompt_names },
     { "Player 2 Button Prompts",     "ButtonPromptsP2",  &g_prompt_style[1], OPT_NAMED, 0, NULL, 3, NULL, NULL, k_prompt_names },
     { "Aspect Ratio Fix",            "FixAspect",        &g_fix_aspect,    OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
-    { "Wide Cutscene FOV",           "CutsceneFOV",      &g_cutscene_fov,  OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
-    { "Wide HUD",                    "HudWide",          &g_hud_wide,      OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
+    { "Ultrawide Cutscene FOV",      "CutsceneFOV",      &g_cutscene_fov,  OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
+    { "Ultrawide HUD",               "HudWide",          &g_hud_wide,      OPT_BOOL,  0, NULL, 0, NULL, NULL, NULL },
     { "FPS Limit",                   "MaxFPS",           &g_max_fps,       OPT_LIST,  0, k_fps_list, 8, "Unlimited", " FPS", NULL },
 };
 

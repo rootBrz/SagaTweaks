@@ -14,8 +14,8 @@ Linux specific.
 | Frame-rate fixes | Clock counters, blink timers, grass and foliage animation, collision response and jumps behave as at 60 fps (same jump height, jumps from platforms and over the fallen tree work, at 60 and 1000 fps). |
 | Display | **VSync** and **Window Mode** (fullscreen / windowed / borderless) rows in Video Settings. |
 | Aspect ratio | The picture follows the real shape of the game window (4:3, 16:10, 16:9, 21:9, 32:9, any window), so the Aspect row of Video Settings is removed (it had nothing left to choose). 16:9 is the base: the world widens sideways with the screen, while the UI (HUD, text, character selector) is exactly the 16:9 layout, centered, so nothing is stretched, spread out or overlapping. |
-| Wide cutscenes | On screens wider than 16:9 a cutscene keeps the vertical view it has at 16:9 and widens sideways, instead of cropping the top and bottom of the shot (`CutsceneFOV`, on by default). |
-| Wide HUD | Optional: on screens wider than 16:9 the corner HUD (character portraits, hearts, stud counters, the studs that fly to them) moves out to the edges of the screen (`HudWide`, off by default). |
+| Ultrawide cutscene FOV | On screens wider than 16:9 a cutscene keeps the vertical view it has at 16:9 and widens sideways, instead of cropping the top and bottom of the shot (`CutsceneFOV`, on by default). |
+| Ultrawide HUD | Optional: on screens wider than 16:9 the corner HUD (character portraits, hearts, stud counters, the studs that fly to them) moves out to the edges of the screen (`HudWide`, off by default). |
 | Render scale | 50-300 % internal resolution, native row in Video Settings. The game itself runs at the larger size (windowed or borderless; the Fullscreen choice is skipped while the scale is not 100 %) and the picture is scaled to the window on present. |
 | FSAA | Row removed from Effects Settings: render scale supersamples the whole frame and replaces it. |
 | Input | Player 1 hot-switches keyboard / gamepad. A second gamepad joins as player 2 with **Start**; lost pads drop out cleanly and never lock the pause menu. |
@@ -41,7 +41,7 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `SkipLogos` | 1 | Skip boot logos (restart needed). |
 | `SkipTitle` | 1 | Skip the "Press any button" screen. |
 | `SkipCutscenes` | 1 | Start skips cutscenes. |
-| `HotSwitchInput` | 1 | P1 follows the last used device; extra gamepads join as P2 only with Start (like F2 on keyboard). |
+| `HotSwitchInput` | 1 | P1 follows the last used device; a gamepad that presses Start (or F1 / F2 on the keyboard) while a player can join joins as that player instead. |
 | `StartButton` | 7 | Raw button code used as Start. |
 | `ButtonPromptsP1` / `P2` | 0 | 0 auto, 1 Xbox, 2 PlayStation. `ButtonPrompts` sets both. |
 | `PromptGlyphs` | 1 | 0 leaves the original prompt art untouched. |
@@ -58,6 +58,7 @@ them live in `SagaTweaks.ini`, section `[SagaTweaks]`:
 | `RenderScale` | 1.0 | Internal resolution multiplier. |
 | `FixFrameCounters` | 1 | Frame-rate independent clocks. |
 | `FixGameplayRates` | 1 | Fixes the other per-frame rates found by the code audit (see `docs/AUDIT.md`; wobbling levers and hat machine, sparks of cranks, `docs/CLASSES.md`). |
+| `FixHoverAttack` | 1 | Original bug: after a short hop R2-D2, R4-P17 and R2-Q5 could no longer zap (action / special did nothing). |
 | `FixTitleAspect` | 1 | The "press any button" screen is made for 4:3 and looked stretched sideways on wide screens; it is drawn with the correct proportions and the logo stays put when the menu opens. |
 | `FixContactVelocity` | 1 | Keeps part of the old velocity after a contact at short steps. |
 | `LogicHz` | 0 | Most game logic updates per second (0 = every frame). |

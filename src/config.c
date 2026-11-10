@@ -27,6 +27,7 @@ void ConfigLoad(const char *ini)
     INI_INT(g_logic_hz, "LogicHz", 0);
     INI_INT(g_fix_contact, "FixContactVelocity", 1);
     INI_INT(g_fix_gameplay, "FixGameplayRates", 1);
+    INI_INT(g_fix_hover_attack, "FixHoverAttack", 1);
     INI_INT(g_prompt_glyphs, "PromptGlyphs", 1);
     all = GetPrivateProfileIntA("SagaTweaks", "ButtonPrompts", 0, ini);
     g_prompt_style[0] = GetPrivateProfileIntA("SagaTweaks", "ButtonPromptsP1", all, ini);

@@ -164,7 +164,27 @@
 #define ADDR_STREAK_FN     0x005A3730u  /* sub_5A3730: adds a segment to a trail (lightsaber streak) */
 #define ADDR_STREAK_CALLS  { 0x0049FC89u, 0x0049FD53u, 0x004B1E8Cu }
 #define ADDR_SPARK_RATE_FN 0x0062C350u  /* sub_62C350(rate, dt): random number of events for a rate per second */
-#define ADDR_SPARK_CALLS   { 0x004A0455u, 0x004B231Du, 0x004B24E0u }  /* its calls in the lightsaber code sub_49FA50, sub_4B1AB0 */
+/* Its calls whose count goes on to a particle emitter (sub_684C90 / sub_62C680 / sub_62C760 -> sub_656DC0): lightsaber sub_49FA50 and
+ * sub_4B1AB0, jetpack sub_4A9320, astromech water spray sub_4A9F60, splashes sub_42F5E0 / sub_46AE30 / sub_4DB740, sub_49A5F0,
+ * sub_4A89F0, sub_4AC620, sub_4B2CB0, sub_4B5120 (2), the slam of sub_562570 (2), sub_56E710 and the effect player sub_62C7E0.
+ * Not listed on purpose: the calls that gate one sound, rumble, effect or object per event (0x403A83, 0x42FD83, 0x42FFD2, 0x46A8EF,
+ * 0x4909EF, 0x4C8B13, 0x547CDA, 0x58B7BB, 0x59C727); their rate per second is right as it is. */
+#define ADDR_SPARK_CALLS   { 0x004A0455u, 0x004B231Du, 0x004B24E0u, 0x004A93ADu, 0x004AA172u, 0x0042F882u, 0x0046AE96u, 0x0049A75Bu, \
+                             0x004A8ABBu, 0x004AEC28u, 0x004B2E75u, 0x004B52F5u, 0x004B563Eu, 0x004DBA9Eu, 0x00562A26u, 0x00562A5Au, \
+                             0x0056E776u, 0x0062CF9Cu }
+#define ADDR_THRUST_RATE_FN 0x0062C300u  /* sub_62C300(per frame at 60 fps, dt): the same roll with the rate given per 1/60 s */
+#define ADDR_THRUST_CALLS  { 0x004A9FE7u, 0x0044BDC0u, 0x004A5A3Cu, 0x0062CFB5u }  /* astromech hover flame sub_4A9F60, sub_44BB40, sub_4A56A0, sub_62C7E0 */
+/* One-shot bursts: an event (a hit, a lost piece, a spark roll that already runs at 60 Hz) emits a fixed count once. */
+#define ADDR_EMIT_WINDOW   0x008108E4u  /* flt_8108E4: the emitters' window, the frame time (sub_6579F0 from the main loop) */
+#define ADDR_EMIT_FN       0x00684C90u  /* sub_684C90(emitter, pos, count, a4, a5) */
+#define ADDR_EMIT_VEL_FN   0x0062C760u  /* sub_62C760(table, id, pos, count, velocity) */
+#define ADDR_EMIT_ONCE_CALLS { 0x005A9A39u, 0x00436B7Eu, 0x004D3A68u, 0x00556AF8u, 0x00556B30u }  /* sub_5A99E0, sub_4364E0, sub_4D3800, spinner sparks sub_5568E0 */
+#define ADDR_EMIT_VEL_ONCE_CALL 0x0046C48Cu  /* sub_46C400 */
+#define ADDR_ANIM_FX_FN    0x0062C7E0u  /* sub_62C7E0: effects tied to animations */
+#define ADDR_ANIM_FX_CALL  0x0063042Du  /* its only call, in sub_62FBF0 */
+#define ADDR_ANIM_FX_RATE  0x0062CF74u  /* fldz / fcomp dword [edx+10h]: "has this record a rate", edx = record */
+#define ADDR_APPROACH_FN   0x0054FB80u  /* sub_54FB80(out, from, to, rate): from + (to - from) * min(rate * dt, 1) */
+#define ADDR_HATCH_APPROACH 0x004CEC76u /* its call in the hatch crawl of sub_4CE830 (state 15) */
 #define ADDR_REFRESH_FN    0x006DF270u  /* sub_6DF270: refresh rate in Hz */
 #define ADDR_LIMITER_CALLS { 0x004FD20Bu, 0x004FD237u, 0x004FD25Eu, 0x004FD28Au }  /* its calls in the frame limiter sub_4FD050 */
 #define ADDR_REFRESH_LOAD  0x006E3AE8u  /* mov eax,[eax+8]; mov [esi+168h],eax */

@@ -15,15 +15,17 @@ static int g_join_start_text;
 
 #define DROP_DEBOUNCE_MS      1000   /* time, not frames: 60 frames were 60 ms at 1000 fps */
 
-static unsigned DeviceMask(int device)
-{
-    unsigned mask = 0;
-    int raw;
+#define KEYBOARD_RAW   10        /* sub_6D5040: the id the game's scans report for the keyboard */
+#define KEYBOARD_MASK  0x3C00u   /* raw ids 10..13 are the four layouts of the one keyboard and all report the same keys */
+#define KEY_F1         59
+#define KEY_F2         60
+#define ADDR_MENU_PAGE 0x00574E20u  /* sub_574E20(): id of the open menu page, -1 = none */
+#define ADDR_NO_JOIN   0x0087B738u  /* dword_87B738: the join code sub_427EC0 does nothing while set */
 
-    for (raw = 0; raw < DEVICE_COUNT; raw++)
-        if (((MapDeviceFn)ADDR_MAP_DEVICE)(raw, 0) == device)
-            mask |= 1u << raw;
-    return mask;
+/* The bit a device has in the masks of sub_6D9120. */
+static unsigned RawBit(int device)
+{
+    return 1u << (device >= FIRST_KEYBOARD_DEVICE ? KEYBOARD_RAW : device);
 }
 
 static void AssignDevice(int slot, int device)
@@ -285,7 +287,8 @@ void HotSwitchInput(void)
     int slot0_set = *(int *)ADDR_SLOT_ASSIGNED;
     int slot1_set = *(int *)(ADDR_SLOT_ASSIGNED + 12);
     int player2 = *(int *)(ADDR_PLAYER_OBJ + 4);
-    unsigned mask = 0, pressed = 0, fresh;
+    int p2_active = player2 && *(char *)(player2 + PLAYER_ACTIVE_OFS) < 0;
+    unsigned mask = 0, pressed = 0, join_keys = 0, fresh;
 
     TraceInputState();
     HandleLostPlayer2Pad();
@@ -296,9 +299,9 @@ void HotSwitchInput(void)
     if (slot0_set && !DeviceConnected(slot0_dev))
         slot0_set = 0;                           /* player 1's gamepad is gone: any live device may take over */
     if (slot0_set)
-        mask |= DeviceMask(slot0_dev);           /* only look at other devices */
-    if (player2 && *(char *)(player2 + PLAYER_ACTIVE_OFS) < 0 && slot1_set)
-        mask |= DeviceMask(slot1_dev);           /* player 2 is playing: leave their device alone */
+        mask |= RawBit(slot0_dev);               /* only look at other devices */
+    if (p2_active && slot1_set)
+        mask |= RawBit(slot1_dev);               /* player 2 is playing: leave their device (the keyboard, if they share it) alone */
 
     /*
      * Collect every raw device with a pressed input, then only react to the ones that were
@@ -309,15 +312,27 @@ void HotSwitchInput(void)
     ctx = ((InputSaveFn)ADDR_INPUT_SAVE)();
     ((InputSelectFn)ADDR_INPUT_SELECT)(0);
     for (raw = 0; raw < DEVICE_COUNT; raw++) {
-        int found = ((DetectDeviceFn)ADDR_DETECT_DEVICE)((int)pressed, DETECT_KINDS | DETECT_KINDS_ANALOG, NULL, NULL, 0);
+        int type, code;
+        int found = ((DetectDeviceFn)ADDR_DETECT_DEVICE)((int)pressed, DETECT_KINDS | DETECT_KINDS_ANALOG, &type, &code, 0);
 
         if (found < 0)
             break;
         pressed |= 1u << found;
+        if (found >= FIRST_KEYBOARD_DEVICE ? code == KEY_F1 || code == KEY_F2 : code == g_start_button)
+            join_keys |= 1u << found;
     }
     ((InputSelectFn)ADDR_INPUT_SELECT)(ctx);
+    /* One keyboard: a layout id of its own per raw id sent player 1 to a layout that does not exist (raw 13 maps to 14)
+     * as soon as player 2 played on the keyboard too. */
+    if (pressed & KEYBOARD_MASK)
+        pressed = (pressed & ~KEYBOARD_MASK) | 1u << KEYBOARD_RAW;
+    if (join_keys & KEYBOARD_MASK)
+        join_keys = (join_keys & ~KEYBOARD_MASK) | 1u << KEYBOARD_RAW;
     fresh = pressed & ~g_prev_pressed & ~mask;
     g_prev_pressed = pressed;
+    /* Start on a gamepad and F1 / F2 are how a second player joins: while they can, the press is left to the game's join code. */
+    if (slot0_set && player2 && !p2_active && !*(int *)ADDR_NO_JOIN && ((int (__cdecl *)(void))ADDR_MENU_PAGE)() == -1)
+        fresh &= ~join_keys;
     if (!fresh)
         return;
     for (raw = 0; raw < DEVICE_COUNT && !(fresh & (1u << raw)); raw++)

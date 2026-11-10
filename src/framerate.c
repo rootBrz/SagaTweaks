@@ -952,25 +952,149 @@ static int StreakCallsOk(void)
 }
 
 /*
- * Saber sparks. sub_62C350(rate, dt) rolls how many events a rate per second gives in one frame (0 or 1 at the
- * saber's 10 and 100 per second), and each event emits particles over a window of one frame (sub_656DC0 passes the
- * frame time as the window). The window shrinks with the frame time as well, so the number of sparks per second fell
- * with the square of it: 14x fewer at 850 fps. The rolls use the time of one 60 Hz frame at most, as at 60 fps.
+ * Particle rates. sub_62C350(rate, dt) rolls how many events a rate per second gives in one frame, and each event emits particles over
+ * a window of one frame (sub_656DC0 passes the frame time flt_8108E4 as the window: 30 x count x dt particles). The roll shrinks with
+ * the frame time and so does the window, so the particles per second fell with the frame rate: 14x fewer at 850 fps. The rolls that
+ * feed an emitter use the time of one 60 Hz frame at least, as at 60 fps. sub_62C300 is the same roll with the rate per 1/60 s: the
+ * astromech hover flame is exactly one event per frame at 60 fps and became a coin toss per frame above it.
  */
 static const uintptr_t k_spark_calls[] = ADDR_SPARK_CALLS;
+static const uintptr_t k_thrust_calls[] = ADDR_THRUST_CALLS;
 #define SPARK_CALLS ((int)(sizeof k_spark_calls / sizeof k_spark_calls[0]))
+#define THRUST_CALLS ((int)(sizeof k_thrust_calls / sizeof k_thrust_calls[0]))
 
 typedef unsigned (__cdecl *SparkRateFn)(float, float);
 
+static float RollTime(float dt)
+{
+    return dt > 0.0f && dt < 1.0f / 60.0f ? 1.0f / 60.0f : dt;   /* 0 stays 0: nothing is emitted while time stands still */
+}
+
 static unsigned __cdecl SparkRate(float rate, float dt)
 {
-    return ((SparkRateFn)ADDR_SPARK_RATE_FN)(rate, dt < 1.0f / 60.0f ? 1.0f / 60.0f : dt);
+    return ((SparkRateFn)ADDR_SPARK_RATE_FN)(rate, RollTime(dt));
+}
+
+static unsigned __cdecl ThrustRate(float rate, float dt)
+{
+    return ((SparkRateFn)ADDR_THRUST_RATE_FN)(rate, RollTime(dt));
+}
+
+/*
+ * One-shot bursts. An emitter call makes 30 x count x window particles (sub_6561D0) and the window is the frame time, which is right
+ * for a call made every frame and for the rolls above, but a burst made once per event shrank with the frame: 4x fewer particles at
+ * 240 fps. Those calls run with a window of one 60 Hz frame at least.
+ */
+static const uintptr_t k_once_calls[] = ADDR_EMIT_ONCE_CALLS;
+#define ONCE_CALLS ((int)(sizeof k_once_calls / sizeof k_once_calls[0]))
+
+static void __cdecl EmitOnce(int emitter, int pos, int count, int a4, int a5)
+{
+    float *window = (float *)ADDR_EMIT_WINDOW, keep = *window;
+
+    *window = RollTime(keep);
+    ((void (__cdecl *)(int, int, int, int, int))ADDR_EMIT_FN)(emitter, pos, count, a4, a5);
+    *window = keep;
+}
+
+static int __cdecl EmitVelOnce(int table, int id, int pos, int count, float *velocity)
+{
+    float *window = (float *)ADDR_EMIT_WINDOW, keep = *window;
+    int r;
+
+    *window = RollTime(keep);
+    r = ((int (__cdecl *)(int, int, int, int, float *))ADDR_EMIT_VEL_FN)(table, id, pos, count, velocity);
+    *window = keep;
+    return r;
+}
+
+/*
+ * Effects tied to animations (sub_62C7E0 walks the effect records of the playing animation). A record emits every frame (flag 4), every
+ * frame of a time range (flag 8) or once when the animation passes one of its two event times; it has a rate (record + 16, rolled as
+ * above) or a fixed count (byte + 27). Only "once" with a fixed count is a burst: the check that picks rate or count sets the window for
+ * the record, and the call of sub_62C7E0 puts the frame's window back.
+ */
+float g_anim_window;       /* the window on entry of sub_62C7E0 */
+uintptr_t g_anim_ret;
+
+void __cdecl AnimEmitWindow(const uint8_t *record)
+{
+    int burst = !(*(const float *)(record + 16) > 0.0f) && !(*(const uint32_t *)(record + 20) & 0xC);
+
+    *(float *)ADDR_EMIT_WINDOW = burst ? RollTime(g_anim_window) : g_anim_window;
+}
+
+extern void AnimRateStub(void);
+extern void AnimEffectsHook(void);
+
+__asm__(
+    ".text\n"
+    ".globl _AnimRateStub\n"
+    "_AnimRateStub:\n"
+    "    pushl %eax\n"
+    "    pushl %ecx\n"
+    "    pushl %edx\n"
+    "    pushl %edx\n"
+    "    call _AnimEmitWindow\n"
+    "    addl $4,%esp\n"
+    "    popl %edx\n"
+    "    popl %ecx\n"
+    "    popl %eax\n"
+    "    fldz\n"                      /* the two instructions the call replaced */
+    "    fcomps 0x10(%edx)\n"
+    "    ret\n"
+    ".globl _AnimEffectsHook\n"
+    "_AnimEffectsHook:\n"
+    "    movl 0x008108E4,%eax\n"
+    "    movl %eax,_g_anim_window\n"
+    "    popl _g_anim_ret\n"
+    "    movl $0x0062C7E0,%eax\n"
+    "    call *%eax\n"
+    "    movl _g_anim_window,%ecx\n"
+    "    movl %ecx,0x008108E4\n"
+    "    pushl _g_anim_ret\n"
+    "    ret\n"
+);
+
+static const uint8_t k_anim_rate_orig[5] = { 0xD9, 0xEE, 0xD8, 0x5A, 0x10 };
+
+/*
+ * Hatches for small characters (sub_4CE830, state 15). While the character crawls along the hatch's path the code, every frame, pulls
+ * the position toward the path point (sub_54FB80, rate 10), asks for the floor there (sub_5506F0 -> sub_6729E0) and puts the
+ * character on it, plus a rise of 0.0025 over the crawl. The floor query returns the floor at or below the asked height unless there
+ * is a walkable surface above it within 5 units with no ceiling between, which it prefers. The path points lie a little under the
+ * floor, so at 60 fps the pull (1/6 of the way per frame) keeps the asked height under the floor and the floor itself is the surface
+ * "above". With a short frame the pull is too small to beat the rise, the height ends up on the floor, and the query answers with
+ * the next surface up: in the secret room of Escape From Echo Base that is the top of the dome, where the character is stuck. The
+ * height that goes into the query gets the pull of one 60 Hz frame; the sideways motion is left as it is.
+ */
+static float *__cdecl HatchApproach(float *out, float *from, float *to, float rate)
+{
+    float y = from[1], dt = *(const float *)ADDR_FRAME_DT, pull = rate / 60.0f;
+    float *r = ((float *(__cdecl *)(float *, float *, float *, float))ADDR_APPROACH_FN)(out, from, to, rate);
+
+    if (dt < 1.0f / 60.0f)
+        out[1] = y + (to[1] - y) * (pull < 1.0f ? pull : 1.0f);
+    return r;
 }
 
 static int SparkCallsOk(void)
 {
     int i;
 
+    if (!CallSiteOk(ADDR_HATCH_APPROACH, ADDR_APPROACH_FN))
+        return 0;
+
+    for (i = 0; i < ONCE_CALLS; i++)
+        if (!CallSiteOk(k_once_calls[i], ADDR_EMIT_FN))
+            return 0;
+    if (!CallSiteOk(ADDR_EMIT_VEL_ONCE_CALL, ADDR_EMIT_VEL_FN) || !CallSiteOk(ADDR_ANIM_FX_CALL, ADDR_ANIM_FX_FN) ||
+        !Matches(ADDR_ANIM_FX_RATE, k_anim_rate_orig, sizeof k_anim_rate_orig))
+        return 0;
+
+    for (i = 0; i < THRUST_CALLS; i++)
+        if (!CallSiteOk(k_thrust_calls[i], ADDR_THRUST_RATE_FN))
+            return 0;
     for (i = 0; i < SPARK_CALLS; i++)
         if (!CallSiteOk(k_spark_calls[i], ADDR_SPARK_RATE_FN))
             return 0;
@@ -1197,7 +1321,14 @@ void FramerateInstall(void)
         ok = 1;
         for (i = 0; i < SPARK_CALLS; i++)
             ok &= PatchCall(k_spark_calls[i], SparkRate);
-        Log(ok ? "saber sparks rolled at 60 Hz" : "saber spark patch FAILED");
+        for (i = 0; i < THRUST_CALLS; i++)
+            ok &= PatchCall(k_thrust_calls[i], ThrustRate);
+        for (i = 0; i < ONCE_CALLS; i++)
+            ok &= PatchCall(k_once_calls[i], EmitOnce);
+        ok &= PatchCall(ADDR_EMIT_VEL_ONCE_CALL, EmitVelOnce);
+        Log(PatchCall(ADDR_HATCH_APPROACH, HatchApproach) ? "hatch crawl floor height asked as at 60 fps" : "hatch patch FAILED");
+        ok &= PatchCall(ADDR_ANIM_FX_CALL, AnimEffectsHook) && PatchCall(ADDR_ANIM_FX_RATE, AnimRateStub);
+        Log(ok ? "particle rates rolled at 60 Hz, bursts emitted over a 60 Hz frame" : "particle rate patch FAILED");
     }
     Log(PatchJmp(ADDR_REFRESH_LOAD, RefreshStub, 9) ? "refresh rate patched" : "refresh rate patch FAILED");
 

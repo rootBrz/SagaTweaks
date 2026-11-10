@@ -10,6 +10,7 @@
  *   aspect.c     camera, text and HUD for any aspect ratio; 21:9 and 32:9 in the Aspect row
  *   render.c     render scale (scaled targets, depth twin, virtual backbuffer), D3D9 hooks
  *   prompts.c    Xbox / PlayStation button glyphs, per player
+ *   fixes.c      fixes for bugs the game has at any frame rate
  *   input.c      keyboard / gamepad hot-switching, Start-only joining, drop-out recovery
  *   menus.c      Render Scale row, Tweaks page, hidden FSAA row
  *   config.c     SagaTweaks.ini
@@ -40,6 +41,8 @@ static void __cdecl FrameHook(int game, int *out)
     WindowFrame();
     AspectFrame();
     InputFrame(game);
+    if (game)
+        FixesFrame();
     RenderFrame(cur, titles);
     CutsceneFrame(game, out, cur, titles);   /* runs the game's own frame (or the cutscene skip) */
 }

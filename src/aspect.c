@@ -104,10 +104,60 @@ static void ProbeCamera(void)
     Log(line);
 }
 
+/*
+ * Menu pages that take the HUD's place (sub_4BAE40 skips sub_4B9110 for them) draw the two corner portraits themselves at
+ * x = +-flt_7FC31C, the HUD's portrait anchor, with the texts under them: pages 8 (sub_497000), 12 (sub_4265A0), 13 (sub_496650),
+ * 14 (sub_4967B0) and the character select pages 15..17 (sub_47B160, sub_47B450 and the Free Play one, sub_47BB70, which also fly the
+ * chosen characters to and from the corner). The end of level screen is one of them. Their loads of the constant read this copy, which
+ * HudWide moves outward like the HUD's portraits. The page table is at 0x7FACEC: 28 bytes per page, id at +4, draw function at +12.
+ */
+#define ADDR_PORTRAIT_X 0x007FC31Cu
+static const uintptr_t k_corner_loads[] = {   /* fld ds:flt_7FC31C */
+    0x00457FE9u,   /* sub_457F70: a label and its icon placed from the left portrait's x */
+    0x00485042u,   /* sub_485030: a pair of corner portraits (from sub_486200) */
+    0x004973E8u, 0x00497455u,                                                                             /* page 8 */
+    0x00426632u, 0x0042669Cu, 0x0042682Eu, 0x00426AE1u,                                                   /* page 12 */
+    0x004966BBu, 0x0049671Fu,                                                                             /* page 13 */
+    0x00496810u, 0x00496876u, 0x00496A05u, 0x00496A6Eu, 0x00496ADFu, 0x00496B51u, 0x00496BB8u, 0x00496C27u,   /* page 14 */
+    0x0047B2D1u, 0x0047B343u, 0x0047B5AFu, 0x0047B621u, 0x0047B78Du,
+    0x0047BE01u, 0x0047BEEFu, 0x0047BFADu, 0x0047BFC6u, 0x0047C7A9u, 0x0047C7FDu,
+};
+#define CORNER_LOADS ((int)(sizeof k_corner_loads / sizeof k_corner_loads[0]))
+static const uint8_t k_corner_orig[6] = { 0xD9, 0x05, 0x1C, 0xC3, 0x7F, 0x00 };
+static float g_select_corner;
+
+/* The button hints of those screens (Accept / Back, sub_4B79A0, used by 9 screens) sit in the bottom corners at x = +-flt_7FC350. */
+#define ADDR_HINT_X     0x007FC350u
+#define ADDR_HINT_LOAD  0x004B7B16u   /* fld ds:flt_7FC350 */
+static const uint8_t k_hint_orig[6] = { 0xD9, 0x05, 0x50, 0xC3, 0x7F, 0x00 };
+static float g_hint_corner;
+
+/*
+ * sub_457F70 slides its icon in from x = -1.1, just outside a 16:9 screen: sin(t) * (end - -1.1) - 1.1, with the two 1.1 as pooled
+ * doubles. On a wider screen that point is inside the picture and the icon popped up there. The two operands read these copies, which
+ * hold the same distance outside the real edge (this follows the screen's shape, not HudWide).
+ */
+#define ADDR_SLIDE_FROM_1 0x004582CAu   /* fsub ds:dbl_7586D8 (-1.1) */
+#define ADDR_SLIDE_FROM_2 0x004582D8u   /* fsub ds:dbl_751CF8 (1.1) */
+#define SLIDE_FROM 1.100000023841858
+static const uint8_t k_slide_orig_1[6] = { 0xDC, 0x25, 0xD8, 0x86, 0x75, 0x00 };
+static const uint8_t k_slide_orig_2[6] = { 0xDC, 0x25, 0xF8, 0x1C, 0x75, 0x00 };
+static double g_slide_from_neg = -SLIDE_FROM, g_slide_from_pos = SLIDE_FROM;
+
+static float SideShift(float x);
+
 void AspectFrame(void)
 {
     static const int screen = 3;
 
+    g_select_corner = SideShift(*(const float *)ADDR_PORTRAIT_X);
+    g_hint_corner = SideShift(*(const float *)ADDR_HINT_X);
+    {
+        double d = g_fix_aspect ? AspectValue() / (16.0 / 9.0) - 1.0 : 0.0;
+
+        g_slide_from_pos = SLIDE_FROM + (d > 0.0 ? d : 0.0);
+        g_slide_from_neg = -g_slide_from_pos;
+    }
     if (g_probe_camera)
         ProbeCamera();
     if (g_probe_effects)
@@ -389,6 +439,13 @@ int AspectReady(void)
         for (c = 0; c < 2; c++)
             if (!CallTo(k_fx_calls[c], ADDR_FX_DRAW))
                 return 0;
+        for (c = 0; c < CORNER_LOADS; c++)
+            if (!Matches(k_corner_loads[c], k_corner_orig, sizeof k_corner_orig))
+                return 0;
+        if (!Matches(ADDR_SLIDE_FROM_1, k_slide_orig_1, sizeof k_slide_orig_1) || !Matches(ADDR_SLIDE_FROM_2, k_slide_orig_2, sizeof k_slide_orig_2))
+            return 0;
+        if (!Matches(ADDR_HINT_LOAD, k_hint_orig, sizeof k_hint_orig))
+            return 0;
     }
     {
         size_t h;
@@ -411,6 +468,12 @@ void AspectInstall(void)
     for (i = 0; i < (int)(sizeof k_hud_calls / sizeof k_hud_calls[0]); i++)
         ok &= PatchCall(k_hud_calls[i].site, k_hud_calls[i].thunk);
     ok &= PatchCall(ADDR_HUD_PASS_CALL, HudPass);
+    g_select_corner = *(const float *)ADDR_PORTRAIT_X;   /* the patch thread is ahead of the first AspectFrame */
+    for (i = 0; i < CORNER_LOADS; i++)
+        ok &= PatchPtr(k_corner_loads[i] + 2, &g_select_corner);
+    g_hint_corner = *(const float *)ADDR_HINT_X;
+    ok &= PatchPtr(ADDR_HINT_LOAD + 2, &g_hint_corner);
+    ok &= PatchPtr(ADDR_SLIDE_FROM_1 + 2, &g_slide_from_neg) && PatchPtr(ADDR_SLIDE_FROM_2 + 2, &g_slide_from_pos);
     ok &= PatchCall(k_fx_calls[0], EffectsDraw) && PatchCall(k_fx_calls[1], EffectsDraw);
     for (i = 0; i < 4; i++)
         ok &= PatchJmp(k_width_reads[i], TextWidthStub, 6) && WritePatch(k_width_reads[i], "\xE8", 1);
