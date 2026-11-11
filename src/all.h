@@ -16,3 +16,4 @@
 #include "cutscene.h"
 #include "fixes.h"
 #include "config.h"
+#include "mods.h"

@@ -12,8 +12,9 @@
  *   prompts.c    Xbox / PlayStation button glyphs, per player
  *   fixes.c      fixes for bugs the game has at any frame rate
  *   input.c      keyboard / gamepad hot-switching, Start-only joining, drop-out recovery
- *   menus.c      Render Scale row, Tweaks page, hidden FSAA row
+ *   menus.c      Render Scale row, Tweaks and Mods pages, hidden FSAA row
  *   config.c     SagaTweaks.ini
+ *   mods.c       loose-file overrides from the game's mods folder
  *   util.c       logging and patching primitives
  *   texdump.c    debug texture dumper
  *
@@ -35,7 +36,6 @@ static void __cdecl FrameHook(int game, int *out)
     int titles = *(int *)ADDR_TITLES_LEVEL;
 
     StartupFrame(cur, titles);
-    MenusFrame();
     PromptsFrame();
     FramerateFrame();
     WindowFrame();
@@ -56,7 +56,7 @@ static DWORD WINAPI PatchThread(LPVOID param)
     (void)param; /* wait for SteamStub to decrypt .text: the expected bytes must be there */
     for (tries = 0; tries < PATCH_WAIT_TRIES; tries++) {
         if (StartupReady() && FramerateReady() && WindowReady() && AspectReady() && RenderReady() && MenusReady() && InputReady() &&
-            PromptsReady() && Matches(ADDR_FRAME_CALL, k_frame_call_orig, sizeof k_frame_call_orig))
+            PromptsReady() && ModsReady() && Matches(ADDR_FRAME_CALL, k_frame_call_orig, sizeof k_frame_call_orig))
             break;
         Sleep(1);
     }
@@ -65,6 +65,7 @@ static DWORD WINAPI PatchThread(LPVOID param)
         return 0;
     }
 
+    ModsInstall();
     StartupInstall();
     FramerateInstall();
     WindowInstall();

@@ -5,4 +5,3 @@
 
 int MenusReady(void);
 void MenusInstall(void);
-void MenusFrame(void);

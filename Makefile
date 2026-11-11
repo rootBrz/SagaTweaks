@@ -26,6 +26,12 @@ dist: all
 clean:
 	rm -rf build
 
+build/test_mods.exe: tools/test_mods.c src/mods.c src/mods.h | build/obj
+	$(CC) -O2 -Wall -Wextra -Isrc -static-libgcc -o $@ tools/test_mods.c
+
+test: build/test_mods.exe
+	WINEDEBUG=-all wine $<
+
 -include $(OBJ:.o=.d)
 
-.PHONY: all dist clean
+.PHONY: all dist clean test

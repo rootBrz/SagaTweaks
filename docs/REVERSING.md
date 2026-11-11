@@ -296,14 +296,24 @@ Lessons that still apply: the game saves and restores the surfaces it gets from 
 on pause it copies the swap chain's backbuffer into a snapshot (`StretchRect` in the middle of a frame) and draws that under
 the menu; the paused background is shifted by 3-5 px against the running game even at 100 %, which is the game's own behaviour.
 
-### Menus: Render Scale row, Tweaks page, hidden FSAA row
+### Menus: settings, Tweaks and Mods
 The menu system: table at `0x800AA8`; menu stack depth `0x800944`; menu objects at
 `0x921440 + 224 * depth` with the current row (`+10`), row count (`+18`), left/right/select
 flags (`+0x5C/0x60/0x64`). A page = a draw function + an update function. Row helpers:
-`sub_50F740(menu, text, alpha)` (draws and counts a row), `sub_574DE0` for the pause menu.
+`sub_50F740(menu, text, alpha)` (draws and counts a row), `sub_574DE0` for the pause and Options menus.
+* Options consolidation: main-menu Control (`21`), Video (`0x401`) and Effects (`0x402`) draw calls at
+  `0x495218/236/255` are hidden, as are the Pause calls at `0x495BC0/BDD/BFB`. The Options Back call
+  (`0x4947A0`) draws those three rows first; they become rows 2-4 and Back becomes 5.
+  `OptionsMenuUpdate` detours `sub_494300` directly with a six-byte trampoline and opens the same menu IDs;
+  it presents Back as stock row 2. Main (`sub_494E20`) and Pause (`sub_495900`) also use direct detours,
+  so custom entries cannot fall through to shifted stock rows when a table hook is missed. Main Quit maps
+  to stock row 6. Pause area-specific and Drop Out rows map back three rows; Pause Quit maps to its
+  original dynamic index plus three.
 * Render Scale row: the call that draws the *Back* row of Video Settings (`0x5120E6`) is redirected
   to a stub that draws the extra row first; the update wrapper presents "row 5 = Back" to the
-  original as "row 4".
+  original as "row 4". Video (`sub_50EF80`) and Effects (`sub_50F0D0`) use direct detours like the
+  front menus. The spare Tweaks/Mods callbacks at `0x509480/90` are direct jumps; no menu table-pointer
+  patches remain.
 * Tweaks page: a spare table entry (`0x406`) gets my draw/update; rows are plain `sub_50F740` calls.
   Entries for main/pause menu are patched so Tweaks sits before Quit (the Quit-row call is replaced
   by a stub that draws Tweaks then Quit; an index map sends the shifted row back to the original
@@ -545,3 +555,9 @@ frame) and every ratio is handled the same way. The row itself is hidden (`src/m
 `FixAspect=0` (Tweaks page row, live) makes `CameraAspect` replicate `sub_565470` (aspect 9/16, or 10/16 for setting 2; field of view and text scale as the game has them), `AspectValue` return the game's own ratio, the text hooks and `AspectFrame` do nothing, and the Aspect row drawn again (`AspectRow` in `src/menus.c`; the Video Settings row indices after it shift by one).
 
 `ForceAspect` (ini, debug) replaces the real ratio, class and mode, so the layout of any ratio can be seen on any screen (stretched).
+
+## Loose-file overrides
+
+The resource VFS has four entry points that need the same `mods\` lookup. `sub_4FA3F0(path, mode, archive, flag)` is the central open and covers ordinary handle reads. `sub_4FD5D0(path, out, capacity)` tries the archive full-file reader `sub_4FB960` before calling that open, `sub_4FA690(path)` returns an archived entry's size before opening anything, and the WAV loader `sub_69A460(this, archive, path, format)` opens the DAT directly after finding the member offset through `sub_4FA740`. `src/mods.c` detours all four. An override uses the original routine with the loose path and no archive, preserving the game's own loose-file handles and bookkeeping.
+
+The mod folder comes from `GetModuleFileNameA(NULL)`, not the ASI path (which may be `scripts\` or `plugins\`). Resolution checks immediate `mods\<mod>\<path>` folders in the configured priority order (case-insensitive A–Z by default); loose files directly under `mods\` are ignored. The dedicated Mods menu entry shares the spare `0x406` native page with Tweaks, selects its contents before opening it, and moves folders with Left / Right. Its list reuses the Extras scrolling model: `menu+152 = -selected_row * flt_800994 * menu+144`, with row alpha faded between `flt_7FACD0` and `flt_7FACD4`. The pipe-separated order is saved as `ModPriority`; saved folders keep their order on restart, missing folders are dropped and new folders append in sorted order. Overrides do not need a DAT counterpart, but the game must request their path. No DAT parser is involved.

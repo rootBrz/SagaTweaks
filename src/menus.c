@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * Menus: Render Scale row in Video Settings, the Tweaks page, hidden FSAA and Aspect rows, and the
- * Tweaks entry in the main and pause menu.
+ * Menus: Render Scale row in Video Settings, the Tweaks and Mods pages, hidden FSAA and Aspect rows,
+ * and the Tweaks and Mods entries in the main and pause menu.
  */
 #include "all.h"
 
@@ -15,9 +15,10 @@
  * wrapper does what the stock routine would do for it itself. Changing the
  * value resets the device with a new backbuffer size (RenderScaleSet) and stores the choice in the ini.
  */
-#define ADDR_VID_MENU_UPDATE  0x00800D70u  /* menu table entry 0x401, update callback */
-
 #define VID_MENU_UPDATE_ORIG  0x0050EF80u
+
+static const uint8_t k_video_update_orig[8] = { 0x8B, 0x44, 0x24, 0x04, 0x83, 0x78, 0x68, 0x00 };
+static MenuUpdateFn g_video_update_orig;
 
 #define ADDR_VID_ROW_INSERT   0x005120E6u  /* mov ecx, offset device: first instruction of the Back row code */
 
@@ -145,7 +146,7 @@ static int __cdecl VideoMenuUpdate(int menu)
     int result;
 
     if (*(int *)(menu + MENU_BACK_OFS))
-        return ((MenuUpdateFn)VID_MENU_UPDATE_ORIG)(menu);
+        return g_video_update_orig(menu);
 
     if (g_fix_aspect && *row == TOGGLE_ROW) {                     /* the stock row after the hidden Aspect row (sub_50EF80, case 3) */
         if (*(int *)(menu + MENU_LEFT_OFS) || *(int *)(menu + MENU_RIGHT_OFS) || *(int *)(menu + MENU_SELECT_OFS)) {
@@ -172,32 +173,32 @@ static int __cdecl VideoMenuUpdate(int menu)
     }
     if (*row == BACK_ROW) {
         *row = ORIG_BACK_ROW;                     /* the original routine knows Back as row 4 */
-        result = ((MenuUpdateFn)VID_MENU_UPDATE_ORIG)(menu);
+        result = g_video_update_orig(menu);
         if (*row == ORIG_BACK_ROW)
             *row = BACK_ROW;
         return result;
     }
-    return ((MenuUpdateFn)VID_MENU_UPDATE_ORIG)(menu);
+    return g_video_update_orig(menu);
 }
 
 /*
- * "Tweaks" page: every option of SagaTweaks.ini as a menu row. It lives in menu table entry
- * 0x406, a placeholder with empty callbacks that nothing opens, and is reached through a
- * "Tweaks" row appended to the main menu and the pause menu.
+ * "Tweaks" and "Mods" pages: they share menu table entry 0x406, a placeholder with empty
+ * callbacks. The row used to open it selects which content the callbacks draw and update.
  */
-#define ADDR_TWEAKS_DRAW      0x00800DF8u  /* menu table entry 0x406, draw callback */
-
-#define ADDR_TWEAKS_UPDATE    0x00800DFCu  /* ... update callback */
+#define TWEAKS_DRAW_ORIG      0x00509480u
+#define TWEAKS_UPDATE_ORIG    0x00509490u
 
 #define MENU_TWEAKS           0x406
 
-#define ADDR_MAIN_UPDATE      0x00800E34u  /* menu table entry 1 (main menu), update callback */
-
 #define MAIN_UPDATE_ORIG      0x00494E20u
 
-#define ADDR_PAUSE_UPDATE     0x00800E50u  /* menu table entry 2 (pause menu) */
+static const uint8_t k_main_update_orig[6] = { 0x51, 0xA1, 0x94, 0x64, 0x82, 0x00 };
+static MenuUpdateFn g_main_update_orig;
 
 #define PAUSE_UPDATE_ORIG     0x00495900u
+
+static const uint8_t k_pause_update_orig[5] = { 0xA1, 0x94, 0x64, 0x82, 0x00 };
+static MenuUpdateFn g_pause_update_orig;
 
 #define ADDR_MAIN_QUIT_CALL   0x00495274u  /* call sub_50F740: draws the last row (Quit) of the main menu */
 
@@ -315,19 +316,53 @@ static void TweakStep(const TweakOpt *o, int step)
     TweakStore(o);
 }
 
+static int g_mods_page;
+
+#define ADDR_MENU_ROW_PITCH   0x00800994u  /* flt_800994: native Extras row pitch */
+#define ADDR_SCROLL_FADE_FROM 0x007FACD0u  /* flt_7FACD0: fade start */
+#define ADDR_SCROLL_FADE_TO   0x007FACD4u  /* flt_7FACD4: fully hidden */
+#define ADDR_ROW_TEXT_SCALE   0x008009A8u  /* flt_8009A8 */
+#define MENU_SCROLL_OFS       152
+#define MENU_SCALE_OFS        144
+
+static int ModsRowAlpha(int menu)
+{
+    float y = fabsf(*(float *)(menu + MENU_SCROLL_OFS));
+    float from = *(float *)ADDR_SCROLL_FADE_FROM;
+    float to = *(float *)ADDR_SCROLL_FADE_TO;
+    float alpha = 1.0f;
+
+    if (y > from) {
+        if (y >= to)
+            return 0;
+        alpha = 1.0f - (y - from) / (to - from);
+    }
+    *(float *)ADDR_ROW_TEXT_SCALE = *(float *)(menu + MENU_SCALE_OFS);
+    return (int)(*(int *)ADDR_MENU_ALPHA * alpha);
+}
+
 static int __cdecl TweaksDraw(int menu)
 {
     char value[24], text[64];
+    int count = g_mods_page ? ModsCount() : TWEAK_COUNT;
     int i;
 
-    for (i = 0; i < TWEAK_COUNT; i++) {
-        TweakValueText(&k_tweaks[i], value, sizeof value);
-        snprintf(text, sizeof text, "%s: %s", k_tweaks[i].label, value);
-        ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, text, *(int *)ADDR_MENU_ALPHA);
+    if (g_mods_page)
+        *(float *)(menu + MENU_SCROLL_OFS) =
+            -(float)*(short *)(menu + MENU_CUR_ROW_OFS) * *(float *)ADDR_MENU_ROW_PITCH * *(float *)(menu + MENU_SCALE_OFS);
+    for (i = 0; i < count; i++) {
+        if (g_mods_page) {
+            snprintf(text, sizeof text, "Mod %d: %.40s", i + 1, ModsName(i));
+        } else {
+            TweakValueText(&k_tweaks[i], value, sizeof value);
+            snprintf(text, sizeof text, "%s: %s", k_tweaks[i].label, value);
+        }
+        ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, text, g_mods_page ? ModsRowAlpha(menu) : *(int *)ADDR_MENU_ALPHA);
     }
     if (!*(int *)ADDR_TEXT_READY)
         ((void (__cdecl *)(void))ADDR_TEXT_INIT)();
-    ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, *(const char **)ADDR_TEXT_BACK, *(int *)ADDR_MENU_ALPHA);
+    ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, *(const char **)ADDR_TEXT_BACK,
+                                    g_mods_page ? ModsRowAlpha(menu) : *(int *)ADDR_MENU_ALPHA);
     return 0;
 }
 
@@ -335,6 +370,7 @@ static int __cdecl TweaksUpdate(int menu)
 {
     int row = *(short *)(menu + MENU_CUR_ROW_OFS);
     int select = *(int *)(menu + MENU_SELECT_OFS);
+    int back_row = g_mods_page ? ModsCount() : TWEAK_COUNT;
     int step;
 
     if (*(int *)(menu + MENU_BACK_OFS)) {   /* B / Escape: leave the page like the stock options pages */
@@ -342,17 +378,25 @@ static int __cdecl TweaksUpdate(int menu)
         ((void (__cdecl *)(void))ADDR_MENU_POP)();
         return 0;
     }
-    if (row == TWEAK_COUNT) {
+    if (row == back_row) {
         if (select) {
             *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
             ((void (__cdecl *)(void))ADDR_MENU_POP)();
         }
         return 0;
     }
-    if (row < 0 || row > TWEAK_COUNT)
+    if (row < 0 || row > back_row)
         return 0;
     step = *(int *)(menu + MENU_RIGHT_OFS) || select ? 1 : *(int *)(menu + MENU_LEFT_OFS) ? -1 : 0;
-    if (step) {
+    if (step && g_mods_page) {
+        int moved = ModsMove(row, step);
+
+        if (moved != row) {
+            *(short *)(menu + MENU_CUR_ROW_OFS) = (short)moved;
+            *(int *)(menu + 52) = moved;
+            *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
+        }
+    } else if (step) {
         TweakStep(&k_tweaks[row], step);
         *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
     }
@@ -367,9 +411,10 @@ static int __cdecl TweaksUpdate(int menu)
  */
 #define ADDR_FX_FSAA_ROW_CALL 0x0051242Cu  /* call sub_50F740 at the end of the FSAA row code */
 
-#define ADDR_FX_UPDATE        0x00800D8Cu  /* menu table entry 0x402 (Effects Settings), update callback */
-
 #define FX_UPDATE_ORIG        0x0050F0D0u
+
+static const uint8_t k_effects_update_orig[5] = { 0x57, 0x8B, 0x7C, 0x24, 0x08 };
+static MenuUpdateFn g_effects_update_orig;
 
 #define ADDR_FSAA_DESIRED     0x02976C30u  /* dword_2976C30 */
 
@@ -393,10 +438,10 @@ static int __cdecl EffectsMenuUpdate(int menu)
     int r;
 
     if (*(int *)(menu + MENU_BACK_OFS))
-        return ((MenuUpdateFn)FX_UPDATE_ORIG)(menu);
+        return g_effects_update_orig(menu);
     *row = (short)(before + 1);
     *row_copy = before + 1;
-    r = ((MenuUpdateFn)FX_UPDATE_ORIG)(menu);
+    r = g_effects_update_orig(menu);
     if (*row == before + 1) {
         *row = before;
         *row_copy = before;
@@ -404,15 +449,85 @@ static int __cdecl EffectsMenuUpdate(int menu)
     return r;
 }
 
+/* Move Control Setup, Video Settings and Effects Settings out of the main menu into Options.
+ * Options draws its rows with sub_574DE0; its stock rows are volume, subtitles and Back (row 2). */
+#define ADDR_MAIN_CONTROL_CALL 0x00495218u
+#define ADDR_MAIN_VIDEO_CALL   0x00495236u
+#define ADDR_MAIN_EFFECTS_CALL 0x00495255u
+#define ADDR_OPTIONS_BACK_CALL 0x004947A0u
+#define OPTIONS_UPDATE_ORIG    0x00494300u
+#define OPTIONS_CONTROL_ROW    2
+#define OPTIONS_BACK_ROW       5
+#define ORIG_OPTIONS_BACK_ROW  2
+#define MAIN_ORIG_QUIT_ROW     6
+#define MENU_CONTROL           21
+#define MENU_VIDEO             0x401
+#define MENU_EFFECTS           0x402
+#define ADDR_PAUSE_CONTROL_CALL 0x00495BC0u
+#define ADDR_PAUSE_VIDEO_CALL   0x00495BDDu
+#define ADDR_PAUSE_EFFECTS_CALL 0x00495BFBu
+
+static const uint8_t k_options_update_orig[6] = { 0x51, 0x68, 0x6C, 0x65, 0x87, 0x00 };
+static MenuUpdateFn g_options_update_orig;
+
+static int __cdecl OptionsBackRow(int menu, const char *text)
+{
+    ((PauseRowFn)ADDR_PAUSE_ROW_DRAW)(menu, "Control Setup");
+    ((PauseRowFn)ADDR_PAUSE_ROW_DRAW)(menu, "Video Settings");
+    ((PauseRowFn)ADDR_PAUSE_ROW_DRAW)(menu, "Effects Settings");
+    return ((PauseRowFn)ADDR_PAUSE_ROW_DRAW)(menu, text);
+}
+
+static int __cdecl HiddenPauseRow(int menu, const char *text)
+{
+    (void)menu; (void)text;
+    return 0;
+}
+
+static int __cdecl OptionsMenuUpdate(int menu)
+{
+    short *row = (short *)(menu + MENU_CUR_ROW_OFS);
+    int *row_copy = (int *)(menu + 52);
+    int r;
+
+    if (*(int *)(menu + MENU_BACK_OFS))
+        return g_options_update_orig(menu);
+    if (*row >= OPTIONS_CONTROL_ROW && *row < OPTIONS_BACK_ROW) {
+        if (*(int *)(menu + MENU_SELECT_OFS)) {
+            static const int k_menu_ids[] = { MENU_CONTROL, MENU_VIDEO, MENU_EFFECTS };
+
+            *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
+            ((OpenMenuFn)ADDR_OPEN_MENU)(k_menu_ids[*row - OPTIONS_CONTROL_ROW], 0, -1);
+        }
+        return 0;
+    }
+    if (*row == OPTIONS_BACK_ROW) {
+        *row = ORIG_OPTIONS_BACK_ROW;
+        *row_copy = ORIG_OPTIONS_BACK_ROW;
+        r = g_options_update_orig(menu);
+        if (*row == ORIG_OPTIONS_BACK_ROW) {
+            *row = OPTIONS_BACK_ROW;
+            *row_copy = OPTIONS_BACK_ROW;
+        }
+        return r;
+    }
+    return g_options_update_orig(menu);
+}
+
 /*
- * "Tweaks" is drawn right before the last row (Quit) of the main menu and the pause menu. Its row
- * index is taken from the live draw counter, not from the menu's max-row word: the game computes that
- * word once when the menu opens, but the pause menu's optional "drop out" row comes and goes with the
- * second player, which would swap the Tweaks and Quit rows.
+ * "Tweaks" and "Mods" are drawn right before the last row (Quit) of the main menu and the pause menu.
+ * The first inserted row index is taken from the live draw counter, not from the menu's max-row word:
+ * the game computes that word once when the menu opens, but the pause menu's optional "drop out" row
+ * comes and goes with the second player, which would swap the custom and Quit rows.
  */
 #define MENU_DRAW_ROW_OFS 140   /* dword: row counter of the draw pass, bumped by every row call */
 
 static int g_tweaks_row = -1;
+
+static int CustomMenuRows(void)
+{
+    return 1 + (ModsCount() > 0);
+}
 
 static void NoteTweaksRow(int menu)
 {
@@ -438,6 +553,8 @@ static int __cdecl MainQuitRow(int menu, const char *text, int alpha)
 
     NoteTweaksRow(menu);
     ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, "Tweaks", alpha);     /* same fade as the other rows */
+    if (ModsCount() > 0)
+        ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, "Mods", alpha);
     r = ((MenuRowFn)ADDR_MENU_ROW_TEXT)(menu, text, alpha);
     FitRowRange(menu);
     return r;
@@ -449,36 +566,43 @@ static int __cdecl PauseQuitRow(int menu, const char *text)
 
     NoteTweaksRow(menu);
     ((PauseRowFn)ADDR_PAUSE_ROW_DRAW)(menu, "Tweaks");
+    if (ModsCount() > 0)
+        ((PauseRowFn)ADDR_PAUSE_ROW_DRAW)(menu, "Mods");
     r = ((PauseRowFn)ADDR_PAUSE_ROW_DRAW)(menu, text);
     FitRowRange(menu);
     return r;
 }
 
-static int OpenTweaksRow(int menu)
+static int OpenCustomRow(int menu)
 {
     int row = *(short *)(menu + MENU_CUR_ROW_OFS);
 
-    if (g_tweaks_row <= 0 || row != g_tweaks_row || !*(int *)(menu + MENU_SELECT_FLAG_OFS) ||
-        *(int *)(menu + MENU_BACK_OFS))
+    if (g_tweaks_row <= 0 || !*(int *)(menu + MENU_SELECT_FLAG_OFS) || *(int *)(menu + MENU_BACK_OFS))
+        return 0;
+    if (row == g_tweaks_row)
+        g_mods_page = 0;
+    else if (ModsCount() > 0 && row == g_tweaks_row + 1)
+        g_mods_page = 1;
+    else
         return 0;
     *(int *)ADDR_MENU_SOUND = *(int *)ADDR_MENU_SOUND_ID;
     ((OpenMenuFn)ADDR_OPEN_MENU)(MENU_TWEAKS, 0, -1);
     return 1;
 }
 
-/* Quit moved down one row: the original update routine still knows it by its old index. */
-static int CallShifted(int menu, MenuUpdateFn orig)
+/* Quit follows the visible custom rows: the original update routine still knows its old index. */
+static int CallShifted(int menu, MenuUpdateFn orig, int stock_quit)
 {
     short *row = (short *)(menu + MENU_CUR_ROW_OFS);
     int *row_copy = (int *)(menu + 52);
-    int quit = g_tweaks_row + 1, shifted = g_tweaks_row > 0 && *row == quit, r;
+    int quit = g_tweaks_row + CustomMenuRows(), shifted = g_tweaks_row > 0 && *row == quit, r;
 
     if (shifted) {
-        *row = (short)g_tweaks_row;
-        *row_copy = g_tweaks_row;
+        *row = (short)stock_quit;
+        *row_copy = stock_quit;
     }
     r = orig(menu);
-    if (shifted && *row == g_tweaks_row) {
+    if (shifted && *row == stock_quit) {
         *row = (short)quit;
         *row_copy = quit;
     }
@@ -487,59 +611,86 @@ static int CallShifted(int menu, MenuUpdateFn orig)
 
 static int __cdecl MainMenuUpdate(int menu)
 {
-    if (OpenTweaksRow(menu))
+    if (OpenCustomRow(menu))
         return 0;
-    return CallShifted(menu, (MenuUpdateFn)MAIN_UPDATE_ORIG);
+    return CallShifted(menu, g_main_update_orig, MAIN_ORIG_QUIT_ROW);
 }
 
 static int __cdecl PauseMenuUpdate(int menu)
 {
-    if (OpenTweaksRow(menu))
+    short *row = (short *)(menu + MENU_CUR_ROW_OFS);
+
+    if (OpenCustomRow(menu))
         return 0;
-    return CallShifted(menu, (MenuUpdateFn)PAUSE_UPDATE_ORIG);
+    /* Stock rows 2-4 are hidden. Remap every remaining action before Tweaks/Mods:
+     * area-specific stock row 5, optional Drop Out stock row 6, then final Quit below. */
+    if (*row >= 2 && *row < g_tweaks_row) {
+        int *row_copy = (int *)(menu + 52);
+        int actual = *row, stock = actual + 3;
+        int r;
+
+        *row = (short)stock;
+        *row_copy = stock;
+        r = g_pause_update_orig(menu);
+        if (*row == stock) {
+            *row = (short)actual;
+            *row_copy = actual;
+        }
+        return r;
+    }
+    return CallShifted(menu, g_pause_update_orig, g_tweaks_row + 3);
 }
 
-/*
- * The main menu and pause menu entries are added to the menu table by the game's own init
- * code, after the exe has started, so the "Tweaks" row is hooked in from the frame hook once
- * they show up.
- */
-static int g_front_menus_done;
-
-static void InstallFrontMenus(void)
-{
-    uint32_t fn[2] = { (uint32_t)(uintptr_t)MainMenuUpdate, (uint32_t)(uintptr_t)PauseMenuUpdate };
-
-    if (g_front_menus_done || *(uint32_t *)ADDR_MAIN_UPDATE != MAIN_UPDATE_ORIG ||
-        *(uint32_t *)ADDR_PAUSE_UPDATE != PAUSE_UPDATE_ORIG)
-        return;
-    g_front_menus_done = 1;
-    Log(WritePatch(ADDR_MAIN_UPDATE, &fn[0], 4) && WritePatch(ADDR_PAUSE_UPDATE, &fn[1], 4) ?
-        "tweaks row added to main and pause menu" : "tweaks row FAILED");
-}
 int MenusReady(void)
 {
-    return Matches(ADDR_TWEAKS_DRAW, (const uint8_t[]){ 0x80, 0x94, 0x50, 0x00 }, 4) &&
-           Matches(ADDR_TWEAKS_UPDATE, (const uint8_t[]){ 0x90, 0x94, 0x50, 0x00 }, 4) &&
+    return Matches(TWEAKS_DRAW_ORIG, (const uint8_t[]){ 0xC3, 0xCC, 0xCC, 0xCC, 0xCC }, 5) &&
+           Matches(TWEAKS_UPDATE_ORIG, (const uint8_t[]){ 0xC3, 0xCC, 0xCC, 0xCC, 0xCC }, 5) &&
            Matches(ADDR_FX_FSAA_ROW_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
            Matches(ADDR_VID_ASPECT_ROW_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
-           Matches(ADDR_FX_UPDATE, (const uint8_t[]){ 0xD0, 0xF0, 0x50, 0x00 }, 4) &&
+           Matches(FX_UPDATE_ORIG, k_effects_update_orig, sizeof k_effects_update_orig) &&
            Matches(ADDR_MAIN_QUIT_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
            Matches(ADDR_PAUSE_QUIT_CALL_1, (const uint8_t[]){ 0xE8 }, 1) &&
            Matches(ADDR_PAUSE_QUIT_CALL_2, (const uint8_t[]){ 0xE8 }, 1) &&
            Matches(ADDR_PAUSE_QUIT_CALL_3, (const uint8_t[]){ 0xE8 }, 1) &&
+           Matches(ADDR_MAIN_CONTROL_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
+           Matches(ADDR_MAIN_VIDEO_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
+           Matches(ADDR_MAIN_EFFECTS_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
+           Matches(ADDR_OPTIONS_BACK_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
+           Matches(ADDR_PAUSE_CONTROL_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
+           Matches(ADDR_PAUSE_VIDEO_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
+           Matches(ADDR_PAUSE_EFFECTS_CALL, (const uint8_t[]){ 0xE8 }, 1) &&
+           Matches(MAIN_UPDATE_ORIG, k_main_update_orig, sizeof k_main_update_orig) &&
+           Matches(PAUSE_UPDATE_ORIG, k_pause_update_orig, sizeof k_pause_update_orig) &&
+           Matches(OPTIONS_UPDATE_ORIG, k_options_update_orig, sizeof k_options_update_orig) &&
            Matches(ADDR_VID_ROW_INSERT, (const uint8_t[]){ 0xB9, 0xC8, 0x65, 0x97, 0x02 }, 5) &&
-           Matches(ADDR_VID_MENU_UPDATE, (const uint8_t[]){ 0x80, 0xEF, 0x50, 0x00 }, 4);
+           Matches(VID_MENU_UPDATE_ORIG, k_video_update_orig, sizeof k_video_update_orig);
 }
 
 void MenusInstall(void)
 {
+    g_options_update_orig = MakeTrampoline((const void *)OPTIONS_UPDATE_ORIG, sizeof k_options_update_orig,
+                                           OPTIONS_UPDATE_ORIG + sizeof k_options_update_orig);
+    Log(g_options_update_orig && PatchJmp(OPTIONS_UPDATE_ORIG, OptionsMenuUpdate, sizeof k_options_update_orig) ?
+        "Options handler added" : "Options handler FAILED");
+
+    g_main_update_orig = MakeTrampoline((const void *)MAIN_UPDATE_ORIG, sizeof k_main_update_orig,
+                                        MAIN_UPDATE_ORIG + sizeof k_main_update_orig);
+    g_pause_update_orig = MakeTrampoline((const void *)PAUSE_UPDATE_ORIG, sizeof k_pause_update_orig,
+                                         PAUSE_UPDATE_ORIG + sizeof k_pause_update_orig);
+    Log(g_main_update_orig && PatchJmp(MAIN_UPDATE_ORIG, MainMenuUpdate, sizeof k_main_update_orig) ?
+        "main menu handler added" : "main menu handler FAILED");
+    Log(g_pause_update_orig && PatchJmp(PAUSE_UPDATE_ORIG, PauseMenuUpdate, sizeof k_pause_update_orig) ?
+        "pause menu handler added" : "pause menu handler FAILED");
+
     /* Render Scale row on the Video Settings page, before Back */
-    Log(PatchCall(ADDR_VID_ROW_INSERT, VideoRowStub) && PatchPtr(ADDR_VID_MENU_UPDATE, VideoMenuUpdate) ?
+    g_video_update_orig = MakeTrampoline((const void *)VID_MENU_UPDATE_ORIG, sizeof k_video_update_orig,
+                                         VID_MENU_UPDATE_ORIG + sizeof k_video_update_orig);
+    Log(g_video_update_orig && PatchCall(ADDR_VID_ROW_INSERT, VideoRowStub) &&
+        PatchJmp(VID_MENU_UPDATE_ORIG, VideoMenuUpdate, sizeof k_video_update_orig) ?
         "render scale menu row added" : "render scale menu row FAILED");
 
-    /* the spare menu table entry becomes the Tweaks page */
-    Log(PatchPtr(ADDR_TWEAKS_DRAW, TweaksDraw) && PatchPtr(ADDR_TWEAKS_UPDATE, TweaksUpdate) ?
+    /* the spare menu callbacks become the Tweaks and Mods pages */
+    Log(PatchJmp(TWEAKS_DRAW_ORIG, TweaksDraw, 5) && PatchJmp(TWEAKS_UPDATE_ORIG, TweaksUpdate, 5) ?
         "tweaks page added" : "tweaks page FAILED");
 
     /* "Tweaks" is drawn just before Quit in the main and pause menu */
@@ -547,15 +698,19 @@ void MenusInstall(void)
         PatchCall(ADDR_PAUSE_QUIT_CALL_2, PauseQuitRow) && PatchCall(ADDR_PAUSE_QUIT_CALL_3, PauseQuitRow) ?
         "tweaks row drawn before Quit" : "tweaks row draw hook FAILED");
 
+    Log(PatchCall(ADDR_MAIN_CONTROL_CALL, HiddenRow) && PatchCall(ADDR_MAIN_VIDEO_CALL, HiddenRow) &&
+        PatchCall(ADDR_MAIN_EFFECTS_CALL, HiddenRow) && PatchCall(ADDR_OPTIONS_BACK_CALL, OptionsBackRow) &&
+        PatchCall(ADDR_PAUSE_CONTROL_CALL, HiddenPauseRow) && PatchCall(ADDR_PAUSE_VIDEO_CALL, HiddenPauseRow) &&
+        PatchCall(ADDR_PAUSE_EFFECTS_CALL, HiddenPauseRow) ?
+        "settings moved into Options" : "settings move FAILED");
+
     /* the Aspect row of Video Settings is gone while FixAspect is on: the layout follows the screen's shape (src/aspect.c) */
     Log(PatchCall(ADDR_VID_ASPECT_ROW_CALL, AspectRow) ? "Aspect row hidden" : "Aspect row hide FAILED");
 
     /* FSAA row of Effects Settings is gone */
-    Log(PatchCall(ADDR_FX_FSAA_ROW_CALL, HiddenRow) && PatchPtr(ADDR_FX_UPDATE, EffectsMenuUpdate) ?
+    g_effects_update_orig = MakeTrampoline((const void *)FX_UPDATE_ORIG, sizeof k_effects_update_orig,
+                                           FX_UPDATE_ORIG + sizeof k_effects_update_orig);
+    Log(g_effects_update_orig && PatchCall(ADDR_FX_FSAA_ROW_CALL, HiddenRow) &&
+        PatchJmp(FX_UPDATE_ORIG, EffectsMenuUpdate, sizeof k_effects_update_orig) ?
         "FSAA row hidden" : "FSAA row hide FAILED");
-}
-
-void MenusFrame(void)
-{
-    InstallFrontMenus();
 }

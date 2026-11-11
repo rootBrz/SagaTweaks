@@ -20,7 +20,8 @@ Linux specific.
 | FSAA | Row removed from Effects Settings: render scale supersamples the whole frame and replaces it. |
 | Input | Player 1 hot-switches keyboard / gamepad. A second gamepad joins as player 2 with **Start**; lost pads drop out cleanly and never lock the pause menu. |
 | Prompts | Xbox or PlayStation button glyphs, chosen per player (e.g. Xbox for P1, DualShock for P2). |
-| Menus | A **Tweaks** page in the main and pause menu holds the everyday options; render scale is in Video Settings. |
+| Menus | **Tweaks** and **Mods** entries in the main and pause menu hold everyday options and mod priority. Control Setup, Video Settings and Effects Settings are grouped under **Options**; render scale is in Video Settings. |
+| Mods | Loose files in `mods\` override files inside the game's DAT archives; no unpacking or repacking needed. |
 
 ## Install
 
@@ -30,6 +31,23 @@ Linux specific.
 3. Proton / Wine: make the proxy DLL load. Steam launch option:
    `WINEDLLOVERRIDES="dinput8=n,b" %command%`
 4. Start the game. `SagaTweaks.ini` and `SagaTweaks.log` appear next to the exe.
+
+## Loose-file mods
+
+Keep each mod in its own folder inside the game's `mods\` folder, preserving the paths it would have in an unpacked game:
+
+```
+LEGOStarWarsSaga.exe
+mods\
+  Clone Improvement(s) 1.1\
+    CHARS\
+      CLONE\
+        CLONE.TXT
+```
+
+Every replacement must be inside an immediate mod folder; loose files directly under `mods\` are ignored. The first replacement in the configured mod-folder order wins (case-insensitive A–Z by default). Optional variants in deeper folders are not loaded automatically. Replacements may have a different size and do not need to exist in the original DAT files, but the game must request their paths. Every override is written to `SagaTweaks.log`.
+
+The separate **Mods** entry in the main and pause menus appears when at least one mod folder exists. It lists mod folders in priority order, highest first, using the same scrolling and edge fading as the native Extras menu. **Left** moves the selected mod up; **Right** or **Accept** moves it down. The order saves immediately to `ModPriority` in `SagaTweaks.ini` and affects files loaded afterward. Reload the level or restart for files already loaded. Restart also discovers newly added mod folders.
 
 ## Configuration
 
@@ -72,6 +90,7 @@ Needs `i686-w64-mingw32-gcc`.
 
 ```
 make        # build/SagaTweaks.asi
+make test   # Wine: loose-file priority and fallback checks
 make dist   # build/SagaTweaks.7z
 ```
 
@@ -90,7 +109,7 @@ Single-player only changes; no online component. Use at your own risk.
 ## Source layout
 
 `src/main.c` (entry, per-frame dispatch) and one module per feature: `startup`, `cutscene`,
-`framerate`, `window`, `render`, `prompts`, `input`, `menus`, `config`, plus `util` (patch primitives) and
+`framerate`, `window`, `render`, `prompts`, `input`, `menus`, `config`, `mods` (loose-file overrides), plus `util` (patch primitives) and
 `texdump` (debug). Game addresses and signatures live in `src/game.h`. Each feature module exposes
 `<Name>Ready()` (are the expected game bytes present?), `<Name>Install()` and `<Name>Frame()`.
 

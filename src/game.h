@@ -7,6 +7,13 @@
 #define ADDR_FRAME_CALL    0x004934BFu  /* call sub_491D50 in the main loop */
 #define ADDR_FRAME_FUNC    0x00491D50u
 
+/* Shared resource I/O. The whole-file reader, size query and WAV loader have archive fast paths
+ * that bypass the central open, so loose-file overrides must cover all four. */
+#define ADDR_FILE_OPEN     0x004FA3F0u  /* sub_4FA3F0(path, mode, archive, flag) */
+#define ADDR_FILE_SIZE     0x004FA690u  /* sub_4FA690(path) */
+#define ADDR_FILE_READ     0x004FD5D0u  /* sub_4FD5D0(path, destination, capacity) */
+#define ADDR_WAV_OPEN      0x0069A460u  /* sub_69A460(this, archive, path, format) (thiscall) */
+
 #define ADDR_OPEN_MENU     0x00509830u  /* sub_509830(menu, flag, -1): push a menu */
 #define ADDR_MENU_DEPTH    0x00800944u  /* dword_800944: menu stack depth */
 #define ADDR_MENU_FLAG     0x00924810u  /* dword_924810: passed as 2nd arg by the title screen */

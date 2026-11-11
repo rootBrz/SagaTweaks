@@ -2,6 +2,12 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 2.0
+
+- New: loose files in `mods\<mod folder>\` override DAT resources, including new files, different-sized replacements and archived WAVs. No DAT unpacking or repacking is needed; loose files directly under `mods\` are ignored.
+- New: a dedicated **Mods** menu in main and Pause reorders mod priority and saves it as `ModPriority`. The entry is hidden when no mod folders are detected.
+- Changed: Control Setup, Video Settings and Effects Settings are consolidated under **Options** in main and Pause.
+
 ## 1.5.1
 
 - Renamed: "Wide Cutscene FOV" and "Wide HUD" on the Tweaks page are now "Ultrawide Cutscene FOV" and "Ultrawide HUD" (the ini keys are unchanged).
