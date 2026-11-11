@@ -32,6 +32,7 @@ int g_probe_hero;
 int g_probe_buttons;
 int g_probe_lever;
 int g_probe_anim;
+int g_probe_hatch;
 int g_fix_gameplay = 1;
 int g_logic_hz;   /* upper bound of game logic updates per second, 0 = every frame */
 int g_live_ini;
@@ -1067,22 +1068,62 @@ static const uint8_t k_anim_rate_orig[5] = { 0xD9, 0xEE, 0xD8, 0x5A, 0x10 };
  * "above". With a short frame the pull is too small to beat the rise, the height ends up on the floor, and the query answers with
  * the next surface up: in the secret room of Escape From Echo Base that is the top of the dome, where the character is stuck. The
  * height that goes into the query gets the pull of one 60 Hz frame; the sideways motion is left as it is.
+ *
+ * Measured in that room (ProbeHatch): the tunnel floor is at 3.719, the path at 3.726, and in a strip about 0.006 wide at x = 53.33
+ * the query finds no tunnel floor and returns the tunnel top at 4.093. On the dome side of the strip nothing blocks the step up, so
+ * once the character is up there the query keeps answering with the top. At 60 fps a frame lands in the strip on about half the
+ * crossings, at 850 fps on every one. HatchFloor keeps the last floor when the answer jumps up by more than HATCH_STEP in one frame
+ * and lies that much above the path: a crawl climbs a slope by a few thousandths per frame, never by a tenth.
  */
+#define HATCH_STEP 0.1f
+#define NO_FLOOR   2000000.0f
+
+static float g_hatch_path_y;   /* height of the path point this crawl frame */
+
 static float *__cdecl HatchApproach(float *out, float *from, float *to, float rate)
 {
     float y = from[1], dt = *(const float *)ADDR_FRAME_DT, pull = rate / 60.0f;
     float *r = ((float *(__cdecl *)(float *, float *, float *, float))ADDR_APPROACH_FN)(out, from, to, rate);
 
+    g_hatch_path_y = to[1];
+
     if (dt < 1.0f / 60.0f)
         out[1] = y + (to[1] - y) * (pull < 1.0f ? pull : 1.0f);
+    if (g_probe_hatch) {
+        /* Debug (ProbeHatch=1): one line per crawl frame. from = where the last frame left the hero (y = floor result + rise
+         * unless something moved it since), to = path point, ask = height the floor query gets, floor = last query result. */
+        static int lines;
+        const char *hero = (const char *)out - 92;
+        char buf[320];
+
+        if (lines++ < 20000) {
+            snprintf(buf, sizeof buf, "T dt %.5f timer %.3f/%.3f leg %d,%d from %.4f %.4f %.4f to %.4f %.4f %.4f ask %.4f floor %.4f "
+                     "p128 %.4f p400 %.4f p1864 %.4f off %.4f",
+                     dt, *(const float *)(hero + 1916), *(const float *)(hero + 1924), hero[1971], hero[1972],
+                     from[0], y, from[2], to[0], to[1], to[2], out[1], *(const float *)(hero + 540),
+                     *(const float *)(hero + 132), *(const float *)(hero + 404), *(const float *)(hero + 1868),
+                     *(const float *)(hero + 4080) * *(const float *)(hero + 168));
+            Log(buf);
+        }
+    }
     return r;
+}
+
+static float __cdecl HatchFloor(int obj, float *pos, float range, int mask)
+{
+    float last = *(const float *)((const char *)pos - 92 + 540);   /* the floor the crawl put the character on last frame */
+    float f = (float)((double (__cdecl *)(int, float *, float, int))ADDR_FLOOR_FN)(obj, pos, range, mask);
+
+    if (f != NO_FLOOR && last != NO_FLOOR && f > last + HATCH_STEP && f > g_hatch_path_y + HATCH_STEP)
+        return last;
+    return f;
 }
 
 static int SparkCallsOk(void)
 {
     int i;
 
-    if (!CallSiteOk(ADDR_HATCH_APPROACH, ADDR_APPROACH_FN))
+    if (!CallSiteOk(ADDR_HATCH_APPROACH, ADDR_APPROACH_FN) || !CallSiteOk(ADDR_HATCH_FLOOR, ADDR_FLOOR_FN))
         return 0;
 
     for (i = 0; i < ONCE_CALLS; i++)
@@ -1326,7 +1367,8 @@ void FramerateInstall(void)
         for (i = 0; i < ONCE_CALLS; i++)
             ok &= PatchCall(k_once_calls[i], EmitOnce);
         ok &= PatchCall(ADDR_EMIT_VEL_ONCE_CALL, EmitVelOnce);
-        Log(PatchCall(ADDR_HATCH_APPROACH, HatchApproach) ? "hatch crawl floor height asked as at 60 fps" : "hatch patch FAILED");
+        Log(PatchCall(ADDR_HATCH_APPROACH, HatchApproach) && PatchCall(ADDR_HATCH_FLOOR, HatchFloor)
+            ? "hatch crawl floor height asked as at 60 fps, no jumps onto the tunnel top" : "hatch patch FAILED");
         ok &= PatchCall(ADDR_ANIM_FX_CALL, AnimEffectsHook) && PatchCall(ADDR_ANIM_FX_RATE, AnimRateStub);
         Log(ok ? "particle rates rolled at 60 Hz, bursts emitted over a 60 Hz frame" : "particle rate patch FAILED");
     }

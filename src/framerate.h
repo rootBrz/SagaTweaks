@@ -13,6 +13,7 @@ extern int g_probe_hero;
 extern int g_probe_buttons;
 extern int g_probe_lever;
 extern int g_probe_anim;
+extern int g_probe_hatch;
 extern int g_fix_gameplay;
 extern int g_logic_hz;
 extern int g_fix_contact;

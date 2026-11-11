@@ -58,6 +58,7 @@ void ConfigLoad(const char *ini)
     INI_INT(g_probe_buttons, "ProbeButtons", 0);
     INI_INT(g_probe_lever, "ProbeLever", 0);
     INI_INT(g_probe_anim, "ProbeAnim", 0);
+    INI_INT(g_probe_hatch, "ProbeHatch", 0);
     INI_INT(g_live_ini, "LiveIni", 0);
     INI_INT(g_probe_consts, "ProbeConsts", 0);
     INI_INT(g_probe_draw, "ProbeDraw", 0);

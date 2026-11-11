@@ -366,9 +366,14 @@ player 2 can join (no menu page, `dword_87B738` clear), otherwise player 1 on th
 walkable surface above the asked height within the given range (5) when no ceiling is between, else the floor at or below it. At 60 fps
 the pull toward the path point (below the floor) keeps the asked height under the floor; at a short frame the pull loses to the
 `0.0025` rise and the query returns the next surface up (the dome's top in the secret room of Escape From Echo Base: stuck).
-`HatchApproach` (`src/framerate.c`, call `0x4CEC76`) gives the height the pull of one 60 Hz frame. Derived from the code; not tried in
-the game. Reported detail that fits: it only happens once the breakable dome next to the hatch is destroyed,
-i.e. once the ceiling that blocked the step up is gone.
+`HatchApproach` (`src/framerate.c`, call `0x4CEC76`) gives the height the pull of one 60 Hz frame. Reported detail that fits: it only
+happens once the breakable dome next to the hatch is destroyed, i.e. once the ceiling that blocked the step up is gone.
+That fixed the start and end of the crawl, but the character still rode on top of the tunnel during it. A `ProbeHatch=1` trace at
+~750 fps showed why: tunnel floor 3.719, path 3.726 (above the floor here, not below), and in a strip about 0.006 wide at x = 53.33
+the query has no tunnel floor and returns the tunnel top at 4.093. Toward the dome nothing blocks the step up, so the character
+stays up there for the rest of the crawl. Dense frames always land in the strip; 60 fps frames (0.0105 apart) land in it on about
+half the crossings. `HatchFloor` (call `0x4CECA7`) keeps the last floor when the answer jumps up by more than 0.1 in one frame and
+lies 0.1 above the path. All 7 jumps in the trace match that rule, and no other frame does.
 
 ### Button prompts
 Prompts are glyphs in a font called "Buttons": a 256x128 DXT5 atlas, glyph table (12-byte records

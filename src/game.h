@@ -185,6 +185,8 @@
 #define ADDR_ANIM_FX_RATE  0x0062CF74u  /* fldz / fcomp dword [edx+10h]: "has this record a rate", edx = record */
 #define ADDR_APPROACH_FN   0x0054FB80u  /* sub_54FB80(out, from, to, rate): from + (to - from) * min(rate * dt, 1) */
 #define ADDR_HATCH_APPROACH 0x004CEC76u /* its call in the hatch crawl of sub_4CE830 (state 15) */
+#define ADDR_FLOOR_FN      0x005506F0u  /* sub_5506F0(obj, pos, range, mask): floor height at pos, 2000000 = none */
+#define ADDR_HATCH_FLOOR   0x004CECA7u  /* its call in the hatch crawl, right after the approach */
 #define ADDR_REFRESH_FN    0x006DF270u  /* sub_6DF270: refresh rate in Hz */
 #define ADDR_LIMITER_CALLS { 0x004FD20Bu, 0x004FD237u, 0x004FD25Eu, 0x004FD28Au }  /* its calls in the frame limiter sub_4FD050 */
 #define ADDR_REFRESH_LOAD  0x006E3AE8u  /* mov eax,[eax+8]; mov [esi+168h],eax */

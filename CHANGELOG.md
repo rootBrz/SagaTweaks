@@ -2,7 +2,7 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
-## Unreleased
+## 1.5.1
 
 - Renamed: "Wide Cutscene FOV" and "Wide HUD" on the Tweaks page are now "Ultrawide Cutscene FOV" and "Ultrawide HUD" (the ini keys are unchanged).
 - Fixed: with Input Hot-Switch on, a second player could not join with Start on a gamepad while player 1 used the keyboard: the gamepad was given to player 1 instead. Start (and F1 / F2) now joins whenever a player can join; any other button still moves player 1 to that device.
@@ -10,7 +10,7 @@ Each release needs a `## <version>` section here matching `VERSION`. The release
 - Fixed (original game bug): after a short hop R2-D2, R4-P17 and R2-Q5 could no longer zap with action or special until they hovered for a full jump. `FixHoverAttack=0` turns it off.
 - Fixed: particle effects thinned out above 60 fps: the hover flames of Jango Fett, Boba Fett and the astromech droids (which also flickered), water spray and splashes, slam dust and the other effects that emit a number of particles per second. One-off bursts (hits, lost pieces, crank sparks, bursts tied to an animation) were thinner too.
 - Fixed: "Ultrawide HUD" did not move the corner portraits and the button hints (Accept / Back) of the character select screens (Free Play) and of the end of level screen.
-- Fixed: at high frame rates a small character leaving the secret room near the end of "Escape From Echo Base" through the hatch could end up on top of the dome and be stuck there.
+- Fixed: at high frame rates a small character crawling through the tunnel of the secret room near the end of "Escape From Echo Base" climbed onto the top of the tunnel on the way back, and could end up stuck on top of the dome.
 
 ## 1.5.0
 
