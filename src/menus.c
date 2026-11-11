@@ -352,7 +352,7 @@ static int __cdecl TweaksDraw(int menu)
             -(float)*(short *)(menu + MENU_CUR_ROW_OFS) * *(float *)ADDR_MENU_ROW_PITCH * *(float *)(menu + MENU_SCALE_OFS);
     for (i = 0; i < count; i++) {
         if (g_mods_page) {
-            snprintf(text, sizeof text, "Mod %d: %.40s", i + 1, ModsName(i));
+            snprintf(text, sizeof text, "%d: %.40s", i + 1, ModsName(i));
         } else {
             TweakValueText(&k_tweaks[i], value, sizeof value);
             snprintf(text, sizeof text, "%s: %s", k_tweaks[i].label, value);
