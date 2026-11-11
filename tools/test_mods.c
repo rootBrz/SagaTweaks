@@ -4,7 +4,6 @@
 #include "../src/mods.c"
 
 FILE *g_log;
-char g_ini_path[MAX_PATH];
 
 void Log(const char *msg) { (void)msg; }
 int Matches(uintptr_t addr, const void *bytes, size_t len)
@@ -63,7 +62,7 @@ static void MakeFile(const char *base, const char *child)
 
 int main(void)
 {
-    char temp[MAX_PATH], base[MAX_PATH], out[256], saved[1024];
+    char temp[MAX_PATH], base[MAX_PATH], priority_path[MAX_PATH], out[256], saved[1024];
     const char *name = "CHARS\\CLONE.TXT";
 
     assert(GetTempPathA(sizeof temp, temp));
@@ -71,7 +70,6 @@ int main(void)
     assert(DeleteFileA(base));
     assert(CreateDirectoryA(base, NULL));
     Join(g_mods_dir, base, "mods");
-    Join(g_ini_path, base, "SagaTweaks.ini");
     InitializeCriticalSection(&g_mods_lock);
     MakeDir(base, "mods");
     MakeDir(g_mods_dir, "Z Mod");
@@ -90,8 +88,18 @@ int main(void)
     assert(!strcmp(ModsName(0), "Z Mod"));
     assert(FindOverride(name, out));
     assert(strstr(out, "Z Mod"));
-    assert(GetPrivateProfileStringA("SagaTweaks", "ModPriority", "", saved, sizeof saved, g_ini_path));
-    assert(!strcmp(saved, "Z Mod|A Mod"));
+    Join(priority_path, g_mods_dir, "priority.ini");
+    {
+        FILE *priority = fopen(priority_path, "r");
+
+        assert(priority);
+        assert(fgets(saved, sizeof saved, priority));
+        assert(!strcmp(saved, "Z Mod\n"));
+        assert(fgets(saved, sizeof saved, priority));
+        assert(!strcmp(saved, "A Mod\n"));
+        assert(!fgets(saved, sizeof saved, priority));
+        fclose(priority);
+    }
     ModsRefresh();
     assert(!strcmp(ModsName(0), "Z Mod"));
     assert(ModsMove(1, -1) == 0);

@@ -57,37 +57,34 @@ static int ModNameCompare(const void *a, const void *b)
 
 static void ModsSavePriority(void)
 {
-    size_t size = (size_t)g_mod_count * MAX_PATH + 1;
-    char *priority = malloc(size);
-    int i;
+    char path[MAX_PATH];
+    FILE *priority;
+    int i, n = snprintf(path, sizeof path, "%s\\priority.ini", g_mods_dir);
 
-    if (!priority) {
+    if (n < 0 || n >= (int)sizeof path || !(priority = fopen(path, "w"))) {
         Log("mod priority save FAILED");
         return;
     }
-    priority[0] = 0;
-    for (i = 0; i < g_mod_count; i++) {
-        if (i)
-            strcat(priority, "|");
-        strcat(priority, g_mod_names[i]);
-    }
-    WritePrivateProfileStringA("SagaTweaks", "ModPriority", priority, g_ini_path);
-    free(priority);
+    for (i = 0; i < g_mod_count; i++)
+        fprintf(priority, "%s\n", g_mod_names[i]);
+    fclose(priority);
 }
 
 static void ModsReadPriority(void)
 {
-    size_t size = (size_t)g_mod_count * MAX_PATH + 1;
-    char *priority = malloc(size), *token;
-    int pos = 0;
+    char path[MAX_PATH], name[MAX_PATH];
+    FILE *priority;
+    int pos = 0, n = snprintf(path, sizeof path, "%s\\priority.ini", g_mods_dir);
 
-    if (!priority)
+    if (n < 0 || n >= (int)sizeof path || !(priority = fopen(path, "r")))
         return;
-    GetPrivateProfileStringA("SagaTweaks", "ModPriority", "", priority, (DWORD)size, g_ini_path);
-    token = strtok(priority, "|");
-    while (token) {
-        int i = ModNameIndex(token);
+    while (fgets(name, sizeof name, priority)) {
+        size_t len = strlen(name);
+        int i;
 
+        while (len && (name[len - 1] == '\r' || name[len - 1] == '\n'))
+            name[--len] = 0;
+        i = ModNameIndex(name);
         if (i >= pos) {
             char tmp[MAX_PATH];
 
@@ -96,9 +93,8 @@ static void ModsReadPriority(void)
             memmove(g_mod_names[i], tmp, MAX_PATH);
             pos++;
         }
-        token = strtok(NULL, "|");
     }
-    free(priority);
+    fclose(priority);
 }
 
 static void ModsRefresh(void)

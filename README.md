@@ -47,7 +47,7 @@ mods\
 
 Every replacement must be inside an immediate mod folder; loose files directly under `mods\` are ignored. The first replacement in the configured mod-folder order wins (case-insensitive A–Z by default). Optional variants in deeper folders are not loaded automatically. Replacements may have a different size and do not need to exist in the original DAT files, but the game must request their paths. Every override is written to `SagaTweaks.log`.
 
-The separate **Mods** entry in the main and pause menus appears when at least one mod folder exists. It lists mod folders in priority order, highest first, using the same scrolling and edge fading as the native Extras menu. **Left** moves the selected mod up; **Right** or **Accept** moves it down. The order saves immediately to `ModPriority` in `SagaTweaks.ini` and affects files loaded afterward. Reload the level or restart for files already loaded. Restart also discovers newly added mod folders.
+The separate **Mods** entry in the main and pause menus appears when at least one mod folder exists. It lists mod folders in priority order, highest first, using the same scrolling and edge fading as the native Extras menu. **Left** moves the selected mod up; **Right** or **Accept** moves it down. The order saves immediately to `mods\priority.ini`, one mod folder name per line, and affects files loaded afterward. Reload the level or restart for files already loaded. Restart also discovers newly added mod folders.
 
 ## Configuration
 

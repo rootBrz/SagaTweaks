@@ -2,6 +2,10 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 2.0.1
+
+- Changed: mod priority is now stored in `mods\priority.ini`, one mod folder name per line, instead of `ModPriority` in `SagaTweaks.ini`.
+
 ## 2.0
 
 - New: loose files in `mods\<mod folder>\` override DAT resources, including new files, different-sized replacements and archived WAVs. No DAT unpacking or repacking is needed; loose files directly under `mods\` are ignored.
