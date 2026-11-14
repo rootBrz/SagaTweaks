@@ -567,17 +567,48 @@ frame) and every ratio is handled the same way. The row itself is hidden (`src/m
   `WrapHook` (entry patch, same shape as `TextHook`) scales the width by `(16/9) / ratio`.
 - Control Setup (`sub_422730`, menu page 21, table entry at `0x7FAF3C`): text goes through `sub_422340` -> `sub_50C780`, the dead zone bar
   (row type 2) through `sub_420920`, raw vertices in screen-width units, so only the text was pulled in. The call at `0x422E5F` scales the
-  bar's x only (mode 1 of `sub_600B20`: vertices are NDC, x = 0 the middle). Scaling the half width too was reported to lose the
-  bar's axis and tick lines (`sub_607D70` type 14); cause not found.
+  bar's x and half width (mode 1 of `sub_600B20`: vertices are NDC, x = 0 the middle).
+  The bar's axis and 40 ticks are a plain `D3DPT_LINELIST` through `DrawPrimitiveUP` (`sub_607D70` type 14, `sub_607880` case 0xE,
+  24-byte vertices) on an untextured material (`this + 3772`, made in `sub_420220`): one pixel of the backbuffer. With Render Scale
+  above 100 % the backbuffer is larger than the window and the stretch at Present dropped them (reported; the bar's quads stayed).
+  `BarLinesStub` replaces the line block (`0x420A45`..`0x420C19`, resuming at `0x420C1A`; 12 bytes of stale vertex arguments are on
+  the stack at entry) and `BarLines` draws the same lines as quads (type 13 strips, the background's path), `ceil(scale)` backbuffer
+  pixels thick. Not verified in game. Other one-pixel line draws of the game (`sub_607D70` type 14) have the same weakness.
 - End of level stud tally (`sub_45B290`): per-player counts at `+-0.75` times a fly-in scale, icon `sub_552C10` at `0x45B5F8`, digits
   `sub_482F40` (3D text, x third argument) at `0x45B689`; with `HudWide` both x are scaled by `(0.75 + shift) / 0.75`.
 - The other status screen stage (`sub_460700`) draws each player's count at the HUD's own x: icon `+-flt_7FC2E0` (0.65) through
   `sub_552C10` at `0x4609BD`, digits `+-flt_7FC2EC` (0.61) through `sub_50C780` at `0x460A48`. Both calls shift x like the HUD.
-  `flt_7FC2E0` is also read at `0x46B396`, `0x46D06A`, `0x46D099` (not looked at).
+  The other reads of `flt_7FC2E0` (`0x46B396` in `sub_46B1D0`, `0x46D06A` / `0x46D099` in `sub_46CF10`) are the end x of flying studs
+  spawned through `sub_560B60`, flags `0x2012D` (picked up) and `0x12D` (paid out in a lump, `sub_46D270`). `ScaleEffectStarts` tested
+  `0x20001` and skipped the lump ones (start not scaled, end not shifted); bit `0x20000` only picks `sub_552D10` over `sub_552C10` in
+  `sub_561400`, so the test is now `0x12D`. Not verified in game.
+  In the `sub_570BB0` mode (level `dword_951364`, `dword_93B2A8`, level flag `0x100` or area flag `0x400`) the counter is the centered
+  total of `sub_4B80E0` (text at x = 0, icons at the text's half width, read through `TextWidthStub`); `sub_46AF00` rewrites the
+  flight's end to `flt_87B9AC[player]` every frame, which is nearer the middle than `HUD_SIDE_MIN`, so it stays.
 
 `FixAspect=0` (Tweaks page row, live) makes `CameraAspect` replicate `sub_565470` (aspect 9/16, or 10/16 for setting 2; field of view and text scale as the game has them), `AspectValue` return the game's own ratio, the text hooks and `AspectFrame` do nothing, and the Aspect row drawn again (`AspectRow` in `src/menus.c`; the Video Settings row indices after it shift by one).
 
 `ForceAspect` (ini, debug) replaces the real ratio, class and mode, so the layout of any ratio can be seen on any screen (stretched).
+
+## Sound effects (read for the Linux footstep crackle, cause not found)
+
+Footsteps crackle on Linux (Wine / Proton) without the mod too. The path, read statically, nothing patched:
+
+- DirectSound. `sub_696D00` creates the device (`DirectSoundCreate8`, cooperative level 2), sets the primary format to 44100 Hz stereo
+  16 bit and the listener to position 0, front (0, 0, 1), top (0, 1, 0).
+- A loader thread (`sub_697BC0`) loads each WAV into a master buffer (`sub_696FA0`): `DSBUFFERDESC` flags `0xB8` = software, 3D,
+  frequency, volume; the format comes from the file, its sample rate is kept at `sample + 1032` (records of 1036 bytes at `dword_2973954`).
+- A one-shot (`sub_681F40(name, position)` -> `sub_650F20` -> `sub_698100`): the game computes its own distance fade (`sub_6977B0`),
+  duplicates the master buffer into one of 32 voices (`sub_697470`, `DuplicateSoundBuffer`), asks for the 3D interface and sets max and
+  min distance 1e9, mode head relative and the listener-relative position (`sub_697880`, all immediate), then `SetVolume`,
+  `SetFrequency` and `Play` (`sub_697580`). DirectSound's 3D is used for the panning only.
+- The frequency is `48 * (rate * pitch / 4096) / (rate / 1000)` in integers (pitch 4096 = 48 kHz, the PS2 unit), so a 22050 Hz sample
+  plays at about 22093 Hz: every one-shot is resampled, on Windows too.
+- `sub_698CC0` (every frame) releases a one-shot voice when `GetStatus` no longer says playing (3D interface, `Stop`, `Release`).
+  A playing one-shot is never updated. Voices 32..63 are the looping ones.
+
+What differs under Wine is inside its dsound (3D panning, resampler, mixer), not in these calls. Needs a `+dsound,+dsound3d` log or
+a test with native `dsound` to go further.
 
 ## Loose-file overrides
 

@@ -2,6 +2,11 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 2.1.1
+
+- Fixed: the scale lines of the dead zone bar disappeared with Render Scale above 100%.
+- Fixed: with "Ultrawide HUD" on, studs paid out in a lump flew to where the counter used to be.
+
 ## 2.1
 
 - Fixed: long hints ran off the right edge of screens wider than 16:9. Wrapped text now breaks its lines at the 16:9 width, and with "Ultrawide HUD" on the hint stays in the 16:9 middle instead of moving to the left edge.

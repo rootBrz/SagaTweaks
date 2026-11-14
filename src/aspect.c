@@ -63,6 +63,9 @@ double AspectValue(void)
     return real > 1.0 && real < 8.0 ? real : 16.0 / 9.0;
 }
 
+/* A stud flying to a counter: 0x2012D picked up (sub_46B1D0), 0x12D paid out in a lump (sub_46CF10); bit 0x20000 only picks the draw call. */
+#define FX_STUD 0x12Du
+
 /* Debug: the sprite effect records (276 bytes, sub_560B60 / sub_561400): flags +216, progress +188 / +192, positions at floats 34 (end), 37 (start), 40 (current), scales at 43..46. */
 static void ProbeEffects(void)
 {
@@ -76,7 +79,7 @@ static void ProbeEffects(void)
         const uint8_t *b = (const uint8_t *)r;
         uint32_t flags = *(const uint32_t *)(b + 216);
 
-        if (!b[248] || !(flags & 0x20000))
+        if (!b[248] || (flags & FX_STUD) != FX_STUD)
             continue;
         snprintf(line, sizeof line,
                  "fx %u #%d flags %05X t %.3f/%.3f  end %.3f %.3f %.3f  start %.3f %.3f %.3f  cur %.3f %.3f %.3f  scale %.3f %.3f %.3f %.3f  aspect %.3f",
@@ -309,15 +312,97 @@ static const uint8_t k_wrap_orig[5] = { 0xB8, 0x38, 0x18, 0x00, 0x00 };
 
 /*
  * Control Setup (sub_422730) draws the joypad dead zone bar with raw vertices (sub_420920: x, y, z, half width, in screen-width units)
- * under a text column that TextAnchor pulls in, so the bar sat beside its column. Its x is scaled the same way; the width is not.
+ * under a text column that TextAnchor pulls in, so the bar sat beside its column. Its x and half width are scaled the same way.
  */
 #define ADDR_BAR_FN   0x00420920u
 #define ADDR_BAR_CALL 0x00422E5Fu
 
 void __cdecl BarFit(float *args)
 {
-    args[0] *= (float)TextFit();
+    float k = (float)TextFit();
+
+    args[0] *= k;
+    args[3] *= k;
 }
+
+/*
+ * The bar's axis and 40 ticks are one-pixel D3D lines (sub_607D70 type 14): one pixel of the backbuffer, which Render Scale makes
+ * larger than the window, so the stretch to the window dropped them. The line block of sub_420920 (0x420A45..0x420C19) is replaced:
+ * the same lines are drawn as quads, a whole number of backbuffer pixels thick and at least one window pixel, through the calls
+ * the bar's background uses. args is the function's argument block at that point: x, y (already -y - 0.06), z, half width, height,
+ * fill brightness, alpha scale, value.
+ */
+#define ADDR_BAR_LINES     0x00420A45u
+#define ADDR_PRIM_BEGIN    0x00607D70u   /* sub_607D70(type, 5, material) */
+#define ADDR_PRIM_VERTEX   0x006009E0u   /* sub_6009E0(x, y, z) */
+#define ADDR_PRIM_END      0x006009A0u
+#define ADDR_PRIM_COLOR    0x004200C0u   /* sub_4200C0: colour of the next vertex, in eax */
+#define PRIM_STRIP         13
+
+static const uint8_t k_bar_lines_orig[6] = { 0xD9, 0xEE, 0xD9, 0x5C, 0x24, 0x1C };
+
+/* sub_4208A0: the colour's alpha times the menu's fade. */
+static uint32_t BarFade(float fade, uint32_t color)
+{
+    float a = (float)(color >> 24) * fade;
+
+    return (color & 0xFFFFFFu) | ((uint32_t)(int)(a > 255.0f ? 255.0f : a) << 24);
+}
+
+static void BarQuad(uint32_t material, uint32_t color, float x0, float y0, float x1, float y1, float z)
+{
+    const float xy[4][2] = { { x0, y0 }, { x0, y1 }, { x1, y0 }, { x1, y1 } };
+    int i;
+
+    ((void (__cdecl *)(int, int, uint32_t))ADDR_PRIM_BEGIN)(PRIM_STRIP, 5, material);
+    for (i = 0; i < 4; i++) {
+        uint32_t c = color, fn = ADDR_PRIM_COLOR;
+
+        __asm__ volatile("call *%1" : "+a"(c), "+c"(fn) : : "edx", "memory", "cc");
+        ((void (__cdecl *)(float, float, float))ADDR_PRIM_VERTEX)(xy[i][0], xy[i][1], z);
+    }
+    ((void (__cdecl *)(void))ADDR_PRIM_END)();
+}
+
+void __cdecl BarLines(const uint8_t *menu, const float *args)
+{
+    const int *pp = (const int *)DEV_BACKBUFFER;
+    float fade = *(const float *)(menu + 12);
+    uint32_t material = *(const uint32_t *)(menu + 3772);
+    uint32_t alpha = (uint32_t)(int)(args[6] * 96.0f) << 24;
+    uint32_t major = BarFade(fade, alpha | 0xFFC864u), minor = BarFade(fade, alpha | 0xFF9678u);
+    float x = args[0], y = args[1], z = args[2], half = args[3], height = args[4];
+    float thick = (float)ceil(RenderScaleValue() - 0.01);   /* backbuffer pixels in a line */
+    float px = (thick < 1.0f ? 1.0f : thick) / (float)(pp[0] > 0 ? pp[0] : 1920);   /* half a line; the vertices are NDC */
+    float py = (thick < 1.0f ? 1.0f : thick) / (float)(pp[1] > 0 ? pp[1] : 1080);
+    int i;
+
+    BarQuad(material, BarFade(fade, alpha | 0xC8C8C8u), x - half, y - py, x + half, y + py, z);
+    for (i = 0; i < 20; i++) {   /* every fourth tick is the taller one; the middle tick is drawn twice, as the game does */
+        float d = half / 20.0f * (float)i, h = height * (i & 3 ? 0.5f : 0.8f);
+        uint32_t c = i & 3 ? minor : major;
+
+        BarQuad(material, c, x + d - px, y - h, x + d + px, y + h, z);
+        BarQuad(material, c, x - d - px, y - h, x - d + px, y + h, z);
+    }
+}
+
+extern void BarLinesStub(void);
+
+/* On entry 12 bytes of the last vertex call's arguments are still on the stack; below them the frame is 0x28 bytes to the return address. */
+__asm__(
+    ".text\n"
+    ".globl _BarLinesStub\n"
+    "_BarLinesStub:\n"
+    "    addl $12,%esp\n"
+    "    leal 0x2C(%esp),%eax\n"
+    "    pushl %eax\n"
+    "    pushl %esi\n"
+    "    call _BarLines\n"
+    "    addl $8,%esp\n"
+    "    pushl $0x00420C1A\n"
+    "    ret\n"
+);
 
 extern void BarThunk(void);
 
@@ -423,7 +508,7 @@ static void ScaleEffectStarts(void)
         const uint8_t *b = (const uint8_t *)r;
         uint32_t flags = *(const uint32_t *)(b + 216);
 
-        if (!b[248] || (flags & 0x20001) != 0x20001) {
+        if (!b[248] || (flags & FX_STUD) != FX_STUD) {
             done_x[i] = done_s[i] = done_e[i] = 0.0f;
             continue;
         }
@@ -569,6 +654,8 @@ int AspectReady(void)
     }
     if (!Matches(ADDR_WRAP_FN, k_wrap_orig, sizeof k_wrap_orig) || !CallTo(ADDR_WRAP_FN + 5, ADDR_CHKSTK))
         return 0;
+    if (!Matches(ADDR_BAR_LINES, k_bar_lines_orig, sizeof k_bar_lines_orig))
+        return 0;
     return CallTo(ADDR_RATIO_CALL, ADDR_RATIO_FN) && TextReady() && Matches(ADDR_CAMERA_FN, k_camera_orig, sizeof k_camera_orig);
 }
 
@@ -582,6 +669,7 @@ void AspectInstall(void)
     for (i = 0; i < (int)(sizeof k_hud_calls / sizeof k_hud_calls[0]); i++)
         ok &= PatchCall(k_hud_calls[i].site, k_hud_calls[i].thunk);
     ok &= PatchCall(ADDR_HUD_PASS_CALL, HudPass);
+    ok &= PatchJmp(ADDR_BAR_LINES, BarLinesStub, 6);
     g_select_corner = *(const float *)ADDR_PORTRAIT_X;   /* the patch thread is ahead of the first AspectFrame */
     for (i = 0; i < CORNER_LOADS; i++)
         ok &= PatchPtr(k_corner_loads[i] + 2, &g_select_corner);
