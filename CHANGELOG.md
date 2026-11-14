@@ -2,6 +2,14 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 2.1
+
+- Fixed: long hints ran off the right edge of screens wider than 16:9. Wrapped text now breaks its lines at the 16:9 width, and with "Ultrawide HUD" on the hint stays in the 16:9 middle instead of moving to the left edge.
+- Fixed: with "Ultrawide HUD" on, each player's stud count on the end of level screen stayed behind when the portraits moved to the edges.
+- Fixed: the joypad dead zone bar of Control Setup was not under its column on screens wider than 16:9.
+- Fixed (original game bug): Speed Blur turned itself back on every time the game started.
+- Fixed (original game bug): Jawas made a menu sound every few seconds.
+
 ## 2.0.1
 
 - Changed: mod priority is now stored in `mods\priority.ini`, one mod folder name per line, instead of `ModPriority` in `SagaTweaks.ini`.

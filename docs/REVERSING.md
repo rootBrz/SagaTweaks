@@ -364,9 +364,18 @@ player 2 can join (no menu page, `dword_87B738` clear), otherwise player 1 on th
   `sub_4B9110` for ids 8, 12, 13, 14, 15, 16, 17) draw the corner portraits themselves at `+-flt_7FC31C`, so `HudWide` did not reach
   them: page 8 `sub_497000`, 12 `sub_4265A0`, 13 `sub_496650`, 14 `sub_4967B0`, and the character select pages 15..17 (`sub_47B160`,
   `sub_47B450`, Free Play `sub_47BB70`, through the stubs at `0x47E780..0x47E7A0`). The end of level screen is one of 8 / 12 / 13 / 14
-  (not told apart). Their 27 `fld ds:flt_7FC31C`, plus the one of `sub_457F70` (a left label with its icon) and of `sub_485030` (two corner portraits), read a copy (the icon of `sub_457F70` slides in from `-1.1`: the two pooled doubles at `0x4582CA` / `0x4582D8` read copies moved out by the screen's extra half-width, whatever `HudWide` says) that `AspectFrame` shifts (`g_select_corner`), which also moves the ends of the portrait
+  (not told apart). Their 27 `fld ds:flt_7FC31C`, plus the one of `sub_485030` (two corner portraits), read a copy (the hint `sub_457F70`, an icon with its text, reads the constant too at `0x457FE9` but is left in the 16:9 middle; its icon slides in from `-1.1`: the two pooled doubles at `0x4582CA` / `0x4582D8` read copies moved out by the screen's extra half-width, whatever `HudWide` says) that `AspectFrame` shifts (`g_select_corner`), which also moves the ends of the portrait
   flights. The button hints of `sub_4B79A0` (`+-flt_7FC350`, bottom corners, 9 screens) move the same way: its one load at `0x4B7B16`
   reads `g_hint_corner`.
+
+### Speed Blur setting, Jawa idle sound
+- `pcconfig.txt`: key table at `0x825F20` (name, reader), settings object `dword_826070`, writer `sub_6DB1C0`. `SpeedBlurEnabled` is
+  `+1110` (`byte_8264C6`); the file is read by `sub_6DB990` and then `sub_6DBB30` calls `sub_6DB060(1)` at `0x6DC0B3`, which turns it on again
+  at every start. The 12 bytes are NOPs now. It runs before the window exists, so the patch may land too late: `RestoreBlur` also reads
+  `SpeedBlurEnabled` back from the file (path at settings `+4`, else `off_800478 + 172` + `pcconfig.txt`). Not tried in the game.
+- The Jawa update `sub_4B3B80` (types `word_7F197C`, `word_7F1A30`) ends with `sub_547CB0(character, 0, 0.0)`: idle sound number 0 of the
+  sound table, every 3 to 5 s. The common update `sub_4B6B80` passes the type's own sound (`type + 0x24`: word `+0xE8`, byte `+0x11E`).
+  The call at `0x4B3D2C` goes to `TypeIdleSound`, which does the same. That sound 0 is the menu sound is inferred from the report.
 
 ### Hatches for small characters
 `sub_4CE830` (called for types with flag `0x40000`), state 15, path records "TLT_" (keys `spline`, `duration`, `range`, `1_way`, `crawl`,
@@ -551,6 +560,20 @@ frame) and every ratio is handled the same way. The row itself is hidden (`src/m
   check in `TextAnchor`): the join prompt is drawn from inside `sub_4B88B0` from an anchor that already moved. The flying effects interpolate from
   `r[40]` to `r[34]` (flag 8) and `r[34]` is the counter icon, so `ScaleEffectStarts` shifts it the same way (logged: end -0.983 = -0.65 - 0.333 at 21:9).
   Not touched: centered elements, the character selector, the free play and pause screens. Checked at `ForceAspect=2.37` on the Deck (stretched picture).
+
+- Wrapped text: `sub_50D910` (80 callers; hints, descriptions, HUD labels) breaks lines at a width in screen-width units (argument 12 times
+  `flt_8015F0`, or `flt_8015BC` when not positive) compared with measured glyph widths, which carry the glyph scale `(4/3) / ratio`. The width
+  did not, so lines grew past their 16:9 length (a hint: anchor `0.09 - 0.775`, width `2 - (x + 1) - 0.15`, right end past the edge at 21:9).
+  `WrapHook` (entry patch, same shape as `TextHook`) scales the width by `(16/9) / ratio`.
+- Control Setup (`sub_422730`, menu page 21, table entry at `0x7FAF3C`): text goes through `sub_422340` -> `sub_50C780`, the dead zone bar
+  (row type 2) through `sub_420920`, raw vertices in screen-width units, so only the text was pulled in. The call at `0x422E5F` scales the
+  bar's x only (mode 1 of `sub_600B20`: vertices are NDC, x = 0 the middle). Scaling the half width too was reported to lose the
+  bar's axis and tick lines (`sub_607D70` type 14); cause not found.
+- End of level stud tally (`sub_45B290`): per-player counts at `+-0.75` times a fly-in scale, icon `sub_552C10` at `0x45B5F8`, digits
+  `sub_482F40` (3D text, x third argument) at `0x45B689`; with `HudWide` both x are scaled by `(0.75 + shift) / 0.75`.
+- The other status screen stage (`sub_460700`) draws each player's count at the HUD's own x: icon `+-flt_7FC2E0` (0.65) through
+  `sub_552C10` at `0x4609BD`, digits `+-flt_7FC2EC` (0.61) through `sub_50C780` at `0x460A48`. Both calls shift x like the HUD.
+  `flt_7FC2E0` is also read at `0x46B396`, `0x46D06A`, `0x46D099` (not looked at).
 
 `FixAspect=0` (Tweaks page row, live) makes `CameraAspect` replicate `sub_565470` (aspect 9/16, or 10/16 for setting 2; field of view and text scale as the game has them), `AspectValue` return the game's own ratio, the text hooks and `AspectFrame` do nothing, and the Aspect row drawn again (`AspectRow` in `src/menus.c`; the Video Settings row indices after it shift by one).
 

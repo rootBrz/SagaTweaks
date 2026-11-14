@@ -56,7 +56,7 @@ static DWORD WINAPI PatchThread(LPVOID param)
     (void)param; /* wait for SteamStub to decrypt .text: the expected bytes must be there */
     for (tries = 0; tries < PATCH_WAIT_TRIES; tries++) {
         if (StartupReady() && FramerateReady() && WindowReady() && AspectReady() && RenderReady() && MenusReady() && InputReady() &&
-            PromptsReady() && ModsReady() && Matches(ADDR_FRAME_CALL, k_frame_call_orig, sizeof k_frame_call_orig))
+            PromptsReady() && ModsReady() && FixesReady() && Matches(ADDR_FRAME_CALL, k_frame_call_orig, sizeof k_frame_call_orig))
             break;
         Sleep(1);
     }
@@ -74,6 +74,7 @@ static DWORD WINAPI PatchThread(LPVOID param)
     MenusInstall();
     InputInstall();
     PromptsInstall();
+    FixesInstall();
     Log(PatchCall(ADDR_FRAME_CALL, FrameHook) ? "frame hook installed" : "frame hook FAILED");
     return 0;
 }

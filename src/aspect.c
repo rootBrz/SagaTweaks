@@ -110,10 +110,10 @@ static void ProbeCamera(void)
  * 14 (sub_4967B0) and the character select pages 15..17 (sub_47B160, sub_47B450 and the Free Play one, sub_47BB70, which also fly the
  * chosen characters to and from the corner). The end of level screen is one of them. Their loads of the constant read this copy, which
  * HudWide moves outward like the HUD's portraits. The page table is at 0x7FACEC: 28 bytes per page, id at +4, draw function at +12.
+ * The hint (sub_457F70, an icon and its text placed from the same constant at 0x457FE9) is left out: it stays in the 16:9 middle.
  */
 #define ADDR_PORTRAIT_X 0x007FC31Cu
 static const uintptr_t k_corner_loads[] = {   /* fld ds:flt_7FC31C */
-    0x00457FE9u,   /* sub_457F70: a label and its icon placed from the left portrait's x */
     0x00485042u,   /* sub_485030: a pair of corner portraits (from sub_486200) */
     0x004973E8u, 0x00497455u,                                                                             /* page 8 */
     0x00426632u, 0x0042669Cu, 0x0042682Eu, 0x00426AE1u,                                                   /* page 12 */
@@ -231,6 +231,12 @@ static void __cdecl CameraAspect(int wide)
  */
 static int g_in_hud;   /* the per-player HUD (sub_4B9110) is being drawn */
 
+/* What a text anchor is multiplied by: text is laid out for 16:9 in the middle of a screen of any width. */
+static double TextFit(void)
+{
+    return g_fix_aspect && *(const uint8_t *)ADDR_WIDE ? (16.0 / 9.0) / AspectValue() : 1.0;
+}
+
 /* HudWide: an anchor on a side of the screen moves outward by the width the screen has beyond 16:9 (x = +-1 is the 16:9 side). */
 static float SideShift(float x)
 {
@@ -255,9 +261,83 @@ void __cdecl TextAnchor(float *x)
     if (g_fix_aspect && *(const uint8_t *)ADDR_WIDE) {
         if (ret >= ADDR_HUD_PASS && ret < ADDR_HUD_PASS + HUD_PASS_SIZE)
             *x = HudShift(*x);
-        *x = (float)(*x * (16.0 / 9.0) / AspectValue());
+        *x = (float)(*x * TextFit());
     }
 }
+
+/*
+ * Wrapped text (sub_50D910, 80 callers: hints, descriptions, HUD labels) breaks its lines at a width given in screen-width units
+ * (argument 12, times flt_8015F0; flt_8015BC when it is not positive) and compares it with measured glyph widths, which shrink with
+ * the ratio like the anchors do. The width did not: on a wider screen the lines grew past their 16:9 length and a long hint ran off
+ * the right edge. The width is scaled like the anchors.
+ */
+#define ADDR_WRAP_FN      0x0050D910u
+#define ADDR_WRAP_UNIT    0x008015F0u
+#define ADDR_WRAP_DEFAULT 0x008015BCu
+
+void __cdecl WrapFit(float *width)
+{
+    double k = TextFit();
+    float unit = *(const float *)ADDR_WRAP_UNIT;
+
+    if (k == 1.0)
+        return;
+    if (*width > 0.0f)
+        *width = (float)(*width * k);
+    else if (unit > 0.0f)
+        *width = (float)(*(const float *)ADDR_WRAP_DEFAULT * k / unit);
+}
+
+extern void WrapHook(void);
+
+__asm__(
+    ".text\n"
+    ".globl _WrapHook\n"
+    "_WrapHook:\n"
+    "    leal 0x30(%esp),%eax\n"
+    "    pushl %eax\n"
+    "    call _WrapFit\n"
+    "    addl $4,%esp\n"
+    "    movl $0x1838,%eax\n"
+    "    movl $0x006E6D60,%ecx\n"
+    "    call *%ecx\n"
+    "    pushl $0x0050D91A\n"
+    "    ret\n"
+);
+
+static const uint8_t k_wrap_orig[5] = { 0xB8, 0x38, 0x18, 0x00, 0x00 };
+
+/*
+ * Control Setup (sub_422730) draws the joypad dead zone bar with raw vertices (sub_420920: x, y, z, half width, in screen-width units)
+ * under a text column that TextAnchor pulls in, so the bar sat beside its column. Its x is scaled the same way; the width is not.
+ */
+#define ADDR_BAR_FN   0x00420920u
+#define ADDR_BAR_CALL 0x00422E5Fu
+
+void __cdecl BarFit(float *args)
+{
+    args[0] *= (float)TextFit();
+}
+
+extern void BarThunk(void);
+
+__asm__(
+    ".text\n"
+    ".globl _BarThunk\n"
+    "_BarThunk:\n"
+    "    pushl %eax\n"
+    "    pushl %ecx\n"
+    "    pushl %edx\n"
+    "    leal 16(%esp),%eax\n"
+    "    pushl %eax\n"
+    "    call _BarFit\n"
+    "    addl $4,%esp\n"
+    "    popl %edx\n"
+    "    popl %ecx\n"
+    "    popl %eax\n"
+    "    pushl $0x00420920\n"
+    "    ret\n"
+);
 
 extern void TextHook(void);
 
@@ -390,11 +470,11 @@ static double __cdecl CutsceneRatio(void)
  * gets a thunk that passes its x argument (the first or the second stack argument) through HudShift. An element moves as a whole, as
  * its parts are placed relative to the anchor. Text goes through TextAnchor.
  */
-#define HUD_THUNK(name, arg_off, target) \
+#define HUD_THUNK(name, arg_off, target, map) \
     extern void name(void); \
     __asm__(".text\n.globl _" #name "\n_" #name ":\n" \
             "    pushl %eax\n    pushl %ecx\n    pushl %edx\n" \
-            "    pushl " #arg_off "+12(%esp)\n    call _HudShift\n    addl $4,%esp\n    fstps " #arg_off "+12(%esp)\n" \
+            "    pushl " #arg_off "+12(%esp)\n    call _" #map "\n    addl $4,%esp\n    fstps " #arg_off "+12(%esp)\n" \
             "    popl %edx\n    popl %ecx\n    popl %eax\n    pushl $" #target "\n    ret\n")
 
 #define ADDR_HUD_PASS_CALL 0x004BB17Bu   /* call sub_4B9110 in sub_4BAE40 */
@@ -403,16 +483,47 @@ static double __cdecl CutsceneRatio(void)
 #define ADDR_ICON_FN       0x00552C10u   /* sub_552C10(x, y, ...) */
 #define ADDR_HEARTS_FN     0x004B88B0u   /* sub_4B88B0(x, y, ...), player in EAX */
 
-HUD_THUNK(HudSprite, 8, 0x0050D910);     /* ADDR_SPRITE_FN, x is the second argument */
-HUD_THUNK(HudPortrait, 8, 0x0055B830);   /* ADDR_PORTRAIT_FN */
-HUD_THUNK(HudIcon, 4, 0x00552C10);       /* ADDR_ICON_FN, x is the first argument */
-HUD_THUNK(HudHearts, 4, 0x004B88B0);     /* ADDR_HEARTS_FN: the player is in EAX, x is the first stack argument */
+HUD_THUNK(HudSprite, 8, 0x0050D910, HudShift);     /* ADDR_SPRITE_FN, x is the second argument */
+HUD_THUNK(HudPortrait, 8, 0x0055B830, HudShift);   /* ADDR_PORTRAIT_FN */
+HUD_THUNK(HudIcon, 4, 0x00552C10, HudShift);       /* ADDR_ICON_FN, x is the first argument */
+HUD_THUNK(HudHearts, 4, 0x004B88B0, HudShift);     /* ADDR_HEARTS_FN: the player is in EAX, x is the first stack argument */
+
+/*
+ * The end of level stud tally (sub_45B290) draws each player's count at x = +-0.75 times its fly-in scale, next to the corner portraits
+ * (sub_485030, +-flt_7FC31C) that HudWide moves: the icon through sub_552C10 and the digits through sub_482F40 (x is its third
+ * argument). Both x are scaled so that the end position moves out by the same distance as the portraits.
+ */
+#define ADDR_TALLY_TEXT_FN 0x00482F40u
+#define TALLY_X            0.75f
+
+float __cdecl TallyShift(float x)
+{
+    return x * SideShift(TALLY_X) / TALLY_X;
+}
+
+HUD_THUNK(TallyIcon, 4, 0x00552C10, TallyShift);    /* ADDR_ICON_FN */
+HUD_THUNK(TallyText, 12, 0x00482F40, TallyShift);   /* ADDR_TALLY_TEXT_FN */
+
+/*
+ * The other status screen (sub_460700) draws each player's count like the HUD does, at the HUD's own x (icon +-flt_7FC2E0 through
+ * sub_552C10, digits +-flt_7FC2EC through sub_50C780), outside the HUD pass: both calls move like the HUD's.
+ */
+float __cdecl SideMove(float x)
+{
+    return SideShift(x);
+}
+
+HUD_THUNK(StatusIcon, 4, 0x00552C10, SideMove);   /* ADDR_ICON_FN */
+HUD_THUNK(StatusText, 8, 0x0050C780, SideMove);   /* ADDR_TEXT_FN, x is the second argument */
 
 static const struct { uintptr_t site, target; void (*thunk)(void); } k_hud_calls[] = {
     { 0x004B9479u, ADDR_PORTRAIT_FN, HudPortrait },
     { 0x004B95B7u, ADDR_SPRITE_FN, HudSprite }, { 0x004B967Eu, ADDR_SPRITE_FN, HudSprite }, { 0x004B99E5u, ADDR_SPRITE_FN, HudSprite },
     { 0x004B9793u, ADDR_ICON_FN, HudIcon }, { 0x004B9807u, ADDR_ICON_FN, HudIcon }, { 0x004B9C57u, ADDR_ICON_FN, HudIcon },
     { 0x004B9924u, ADDR_HEARTS_FN, HudHearts },
+    { 0x0045B5F8u, ADDR_ICON_FN, TallyIcon }, { 0x0045B689u, ADDR_TALLY_TEXT_FN, TallyText },
+    { 0x004609BDu, ADDR_ICON_FN, StatusIcon }, { 0x00460A48u, ADDR_TEXT_FN, StatusText },
+    { ADDR_BAR_CALL, ADDR_BAR_FN, BarThunk },
 };
 
 static void __cdecl HudPass(int dim)
@@ -456,6 +567,8 @@ int AspectReady(void)
         if (!CallTo(ADDR_HUD_PASS_CALL, ADDR_HUD_PASS))
             return 0;
     }
+    if (!Matches(ADDR_WRAP_FN, k_wrap_orig, sizeof k_wrap_orig) || !CallTo(ADDR_WRAP_FN + 5, ADDR_CHKSTK))
+        return 0;
     return CallTo(ADDR_RATIO_CALL, ADDR_RATIO_FN) && TextReady() && Matches(ADDR_CAMERA_FN, k_camera_orig, sizeof k_camera_orig);
 }
 
@@ -464,6 +577,7 @@ void AspectInstall(void)
     int i, ok = PatchJmp(ADDR_CAMERA_FN, CameraAspect, 5);
 
     ok &= PatchJmp(ADDR_TEXT_FN, TextHook, 10);
+    ok &= PatchJmp(ADDR_WRAP_FN, WrapHook, 10);
     ok &= PatchCall(ADDR_RATIO_CALL, CutsceneRatio);
     for (i = 0; i < (int)(sizeof k_hud_calls / sizeof k_hud_calls[0]); i++)
         ok &= PatchCall(k_hud_calls[i].site, k_hud_calls[i].thunk);
