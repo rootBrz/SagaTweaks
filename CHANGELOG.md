@@ -2,6 +2,10 @@
 
 Each release needs a `## <version>` section here matching `VERSION`. The release workflow publishes that section as the GitHub release notes and fails if it is missing.
 
+## 2.1.2
+
+- Fixed: with the boot logos on, the opening quote ("A long time ago...") was stretched on widescreen.
+
 ## 2.1.1
 
 - Fixed: the scale lines of the dead zone bar disappeared with Render Scale above 100%.

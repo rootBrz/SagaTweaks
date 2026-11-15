@@ -618,7 +618,23 @@ static void __cdecl HudPass(int dim)
     g_in_hud = 0;
 }
 
-static const uint8_t k_camera_orig[8] = { 0x51, 0x83, 0x3D, 0x94, 0x64, 0x82, 0x00, 0x02 };
+/*
+ * The opening quote of the boot sequence (sub_54BF20) is drawn straight by the engine's wrapped text (sub_5F69C0) with the 4:3
+ * glyph scale, before any camera exists to set the text scale: wider screens stretched it. Glyph width, anchor and wrap width
+ * are all in screen-width units, so all three shrink by (4/3) / ratio and the 4:3 layout stays in the middle.
+ */
+#define ADDR_QUOTE_CALL 0x0054C007u
+#define ADDR_QUOTE_TEXT 0x005F69C0u
+
+static double __cdecl QuoteText(int font, int text, float x, float y, float z, float sx, float sy, float width, float a9, int color, int a11)
+{
+    float k = g_fix_aspect ? (float)((4.0 / 3.0) / AspectValue()) : 1.0f;
+
+    return ((double (__cdecl *)(int, int, float, float, float, float, float, float, float, int, int))ADDR_QUOTE_TEXT)(
+        font, text, x * k, y, z, sx * k, sy, width * k, a9, color, a11);
+}
+
+static const uint8_t k_camera_orig[8] ={ 0x51, 0x83, 0x3D, 0x94, 0x64, 0x82, 0x00, 0x02 };
 
 static int CallTo(uintptr_t site, uintptr_t fn)
 {
@@ -656,7 +672,7 @@ int AspectReady(void)
         return 0;
     if (!Matches(ADDR_BAR_LINES, k_bar_lines_orig, sizeof k_bar_lines_orig))
         return 0;
-    return CallTo(ADDR_RATIO_CALL, ADDR_RATIO_FN) && TextReady() && Matches(ADDR_CAMERA_FN, k_camera_orig, sizeof k_camera_orig);
+    return CallTo(ADDR_RATIO_CALL, ADDR_RATIO_FN) && CallTo(ADDR_QUOTE_CALL, ADDR_QUOTE_TEXT) && TextReady() && Matches(ADDR_CAMERA_FN, k_camera_orig, sizeof k_camera_orig);
 }
 
 void AspectInstall(void)
@@ -669,6 +685,7 @@ void AspectInstall(void)
     for (i = 0; i < (int)(sizeof k_hud_calls / sizeof k_hud_calls[0]); i++)
         ok &= PatchCall(k_hud_calls[i].site, k_hud_calls[i].thunk);
     ok &= PatchCall(ADDR_HUD_PASS_CALL, HudPass);
+    ok &= PatchCall(ADDR_QUOTE_CALL, QuoteText);
     ok &= PatchJmp(ADDR_BAR_LINES, BarLinesStub, 6);
     g_select_corner = *(const float *)ADDR_PORTRAIT_X;   /* the patch thread is ahead of the first AspectFrame */
     for (i = 0; i < CORNER_LOADS; i++)
